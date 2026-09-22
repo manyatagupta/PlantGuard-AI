@@ -5,8 +5,9 @@ import os
 import cv2
 import numpy as np
 from predict import PlantDiseasePredictor
-from utils.db import add_prediction, get_recent_predictions
+from utils.db import add_prediction, get_recent_predictions, get_summary_stats
 from utils.pdf_generator import generate_pdf_report
+import pandas as pd
 
 # Set page configuration for a modern look
 st.set_page_config(
@@ -19,37 +20,60 @@ st.set_page_config(
 # --- Custom CSS for Styling ---
 st.markdown("""
     <style>
-    .main {
-        background-color: #f8f9fa;
+    /* Global Background and Fonts */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+    
+    html, body, [class*="css"] {
+        font-family: 'Inter', sans-serif;
     }
+    .main {
+        background: linear-gradient(135deg, #f0fdf4 0%, #e0f2fe 100%);
+    }
+    
+    /* Sleek Buttons */
     .stButton>button {
-        background-color: #2e7d32;
+        background: linear-gradient(90deg, #10b981 0%, #059669 100%);
         color: white;
-        border-radius: 8px;
-        padding: 10px 24px;
-        font-weight: bold;
-        transition: all 0.3s;
+        border-radius: 12px;
+        padding: 12px 28px;
+        font-weight: 600;
+        border: none;
+        box-shadow: 0 4px 14px 0 rgba(16, 185, 129, 0.39);
+        transition: all 0.3s ease;
     }
     .stButton>button:hover {
-        background-color: #1b5e20;
-        border-color: #1b5e20;
-        color: white;
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(16, 185, 129, 0.5);
     }
+    
+    /* Modern Glassmorphism Cards */
     .disease-card {
-        background-color: white;
-        padding: 20px;
-        border-radius: 12px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        margin-top: 20px;
-        margin-bottom: 20px;
+        background: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        padding: 24px;
+        border-radius: 16px;
+        border: 1px solid rgba(255, 255, 255, 0.5);
+        box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
+        margin: 20px 0;
+        transition: transform 0.3s ease;
     }
+    .disease-card:hover {
+        transform: scale(1.02);
+    }
+    
+    /* Typography */
     .healthy-text {
-        color: #2e7d32;
-        font-weight: bold;
+        color: #10b981;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 1px;
     }
     .disease-text {
-        color: #c62828;
-        font-weight: bold;
+        color: #ef4444;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 1px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -68,6 +92,24 @@ DISEASE_INFO = {
         "causes": "Fungus Venturia inaequalis, thrives in wet, cool spring weather.",
         "prevention": "Rake up and destroy fallen leaves. Water in the morning so leaves dry quickly. Apply fungicides preventatively."
     },
+    "Potato___Early_blight": {
+        "description": "Early blight is a common disease of potatoes and tomatoes caused by the fungus Alternaria solani.",
+        "symptoms": "Dark, concentric rings on older leaves, leading to yellowing and leaf drop.",
+        "causes": "Fungus Alternaria solani, favored by warm, humid weather and heavy dew.",
+        "prevention": "Use certified disease-free seeds. Practice crop rotation. Apply appropriate fungicides."
+    },
+    "Potato___Late_blight": {
+        "description": "Late blight is a devastating disease caused by the oomycete Phytophthora infestans.",
+        "symptoms": "Water-soaked spots on leaves that turn brown or black, often with a white mold underneath.",
+        "causes": "Oomycete Phytophthora infestans, spreading rapidly in cool, wet conditions.",
+        "prevention": "Plant resistant varieties, ensure good drainage, and apply protective fungicides before infection starts."
+    },
+    "Tomato___Target_Spot": {
+        "description": "Target spot is a fungal disease caused by Corynespora cassiicola.",
+        "symptoms": "Small, dark spots on leaves with concentric rings resembling a target.",
+        "causes": "Corynespora cassiicola fungus, thriving in high humidity and warm temperatures.",
+        "prevention": "Improve air circulation, avoid overhead watering, and use fungicide treatments if severe."
+    }
 }
 
 def get_disease_info(class_name):
@@ -88,7 +130,14 @@ def main():
         st.markdown("---")
         
         # Display Prediction History from Database
-        st.markdown("### 🕒 Recent History (Database)")
+        st.markdown("### 📊 Dashboard Metrics")
+        stats = get_summary_stats()
+        col1, col2 = st.columns(2)
+        col1.metric("Total Scans", stats["total"])
+        health_ratio = (stats["healthy"] / stats["total"] * 100) if stats["total"] > 0 else 0
+        col2.metric("Health Ratio", f"{health_ratio:.1f}%")
+        
+        st.markdown("### 🕒 Recent History")
         history = get_recent_predictions(limit=5)
         if len(history) == 0:
             st.write("No predictions yet.")
@@ -122,18 +171,31 @@ def main():
         st.info("💡 **Tip:** If you haven't trained the model yet, please run `python train.py` first with a valid dataset.")
         st.stop()
 
-    st.markdown("#### Upload Leaf Image(s)")
-    uploaded_files = st.file_uploader("Choose images...", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
+    st.markdown("#### Input Leaf Image")
     
-    if uploaded_files:
+    input_source = st.radio("Select Input Method:", ["Upload File(s)", "Take a Picture"], horizontal=True)
+    
+    images_to_process = []
+    
+    if input_source == "Upload File(s)":
+        uploaded_files = st.file_uploader("Choose images...", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
+        if uploaded_files:
+            images_to_process.extend(uploaded_files)
+    else:
+        camera_img = st.camera_input("Take a picture of the plant leaf")
+        if camera_img:
+            camera_img.name = "camera_capture.jpg"
+            images_to_process.append(camera_img)
+            
+    if images_to_process:
         st.markdown("---")
-        st.markdown("#### Batch Analysis Results")
+        st.markdown("#### Analysis Results")
         
-        if st.button("Analyze All Leaves", use_container_width=True):
+        if st.button("Analyze Image(s)", use_container_width=True):
             with st.spinner("Analyzing images... Please wait."):
                 time.sleep(1) # Simulate slight processing delay for UX
                 
-                for uploaded_file in uploaded_files:
+                for uploaded_file in images_to_process:
                     st.markdown(f"### Results for: `{uploaded_file.name}`")
                     col1, col2 = st.columns([1, 2])
                     
@@ -171,6 +233,11 @@ def main():
                             st.write(f"{confidence * 100:.2f}%")
                             
                             st.markdown("</div>", unsafe_allow_html=True)
+                            
+                            with st.expander("📊 View Probability Distribution"):
+                                probs = results['all_probabilities']
+                                df_probs = pd.DataFrame(list(probs.items()), columns=['Disease', 'Probability']).sort_values(by='Probability', ascending=False).head(5)
+                                st.bar_chart(df_probs.set_index('Disease'))
                             
                             info = get_disease_info(disease_class)
                             

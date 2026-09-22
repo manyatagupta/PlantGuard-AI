@@ -50,3 +50,20 @@ def get_recent_predictions(limit=5):
 
 # Initialize on import
 init_db()
+
+def get_summary_stats():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT COUNT(*), SUM(is_healthy) FROM predictions")
+    row = c.fetchone()
+    conn.close()
+    
+    total = row[0] if row[0] is not None else 0
+    healthy = row[1] if row[1] is not None else 0
+    diseased = total - healthy
+    
+    return {
+        "total": total,
+        "healthy": healthy,
+        "diseased": diseased
+    }
