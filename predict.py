@@ -66,21 +66,26 @@ class PlantDiseasePredictor:
     def make_gradcam_heatmap(self, img_array, pred_index=None):
         """Generates a Grad-CAM heatmap for the given image and class."""
         try:
-            # Find the MobileNetV2 layer
-            mobilenet_layer = None
-            for layer in self.model.layers:
-                if 'mobilenet' in layer.name.lower() or isinstance(layer, tf.keras.Model):
-                    mobilenet_layer = layer
+            # Find the last convolutional layer or the nested base model
+            target_layer = None
+            for layer in reversed(self.model.layers):
+                # Check for a nested base model (e.g., EfficientNet, MobileNet)
+                if isinstance(layer, tf.keras.Model):
+                    target_layer = layer
+                    break
+                # Alternatively, check for a standalone convolutional layer
+                if isinstance(layer, tf.keras.layers.Conv2D):
+                    target_layer = layer
                     break
             
-            if mobilenet_layer is None:
+            if target_layer is None:
                 return None
                 
             # Create a model that maps the input image to the activations
-            # of the last conv layer as well as the output predictions
+            # of the target layer as well as the output predictions
             grad_model = Model(
                 [self.model.inputs], 
-                [mobilenet_layer.output, self.model.output]
+                [target_layer.output, self.model.output]
             )
 
             # Compute the gradient of the top predicted class for our input image

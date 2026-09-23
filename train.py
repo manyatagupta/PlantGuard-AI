@@ -8,7 +8,9 @@ from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.utils.class_weight import compute_class_weight
 import datetime
 import seaborn as sns
-
+import tensorflow as tf
+from tensorflow.keras.applications import EfficientNetV2B0
+import matplotlib.pyplot as plt
 # Configuration
 DATASET_DIR = "dataset"
 MODEL_SAVE_PATH = "models/plant_disease_model.keras"
@@ -103,19 +105,18 @@ def main():
         tf.keras.layers.RandomFlip("horizontal_and_vertical"),
         tf.keras.layers.RandomRotation(0.2),
         tf.keras.layers.RandomZoom(0.2),
+        tf.keras.layers.RandomBrightness(factor=0.2),
+        tf.keras.layers.RandomContrast(factor=0.2),
     ])
 
-    # Preprocessing for MobileNetV2
-    preprocess_input = tf.keras.applications.mobilenet_v2.preprocess_input
-
+    # Preprocessing is built into EfficientNetV2B0 when include_preprocessing=True
     # Build Model Architecture
     print("Building model...")
     inputs = tf.keras.Input(shape=(IMG_SIZE[0], IMG_SIZE[1], 3))
     x = data_augmentation(inputs)
-    x = preprocess_input(x)
     
-    # Load MobileNetV2 without the top classification layer
-    base_model = MobileNetV2(input_shape=IMG_SIZE + (3,), include_top=False, weights='imagenet')
+    # Load EfficientNetV2B0 without the top classification layer
+    base_model = EfficientNetV2B0(input_shape=IMG_SIZE + (3,), include_top=False, weights='imagenet', include_preprocessing=True)
     base_model.trainable = False # Freeze base model initially
     
     x = base_model(x, training=False)
@@ -134,8 +135,17 @@ def main():
     class_weights = compute_class_weight('balanced', classes=np.unique(train_labels), y=train_labels)
     class_weight_dict = dict(enumerate(class_weights))
 
+    # Learning Rate Schedule
+    lr_schedule = tf.keras.optimizers.schedules.CosineDecayRestarts(
+        initial_learning_rate=LEARNING_RATE,
+        first_decay_steps=1000,
+        t_mul=2.0,
+        m_mul=0.9,
+        alpha=1e-5
+    )
+
     # Compile Model
-    model.compile(optimizer=Adam(learning_rate=LEARNING_RATE),
+    model.compile(optimizer=Adam(learning_rate=lr_schedule),
                   loss='sparse_categorical_crossentropy',
                   metrics=['accuracy'])
     
@@ -147,7 +157,6 @@ def main():
     callbacks = [
         ModelCheckpoint(MODEL_SAVE_PATH, save_best_only=True, monitor='val_accuracy', mode='max'),
         EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True),
-        ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=3, min_lr=1e-6, verbose=1),
         tensorboard_callback
     ]
 
@@ -170,8 +179,16 @@ def main():
     for layer in base_model.layers[:fine_tune_at]:
         layer.trainable = False
         
-    # Recompile with a lower learning rate
-    model.compile(optimizer=Adam(learning_rate=LEARNING_RATE / 10),
+    # Recompile with a lower learning rate schedule
+    lr_schedule_fine = tf.keras.optimizers.schedules.CosineDecayRestarts(
+        initial_learning_rate=LEARNING_RATE / 10,
+        first_decay_steps=500,
+        t_mul=2.0,
+        m_mul=0.9,
+        alpha=1e-5
+    )
+    
+    model.compile(optimizer=Adam(learning_rate=lr_schedule_fine),
                   loss='sparse_categorical_crossentropy',
                   metrics=['accuracy'])
                   
