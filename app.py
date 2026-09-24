@@ -21,59 +21,100 @@ st.set_page_config(
 st.markdown("""
     <style>
     /* Global Background and Fonts */
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap');
     
     html, body, [class*="css"] {
         font-family: 'Inter', sans-serif;
     }
-    .main {
-        background: linear-gradient(135deg, #f0fdf4 0%, #e0f2fe 100%);
+    
+    /* Premium Dark-Nature Theme for Main Background */
+    .stApp {
+        background: radial-gradient(circle at 10% 20%, #064e3b 0%, #020617 100%);
+        color: #f1f5f9;
+    }
+    
+    /* Sidebar styling */
+    [data-testid="stSidebar"] {
+        background-color: rgba(2, 6, 23, 0.6) !important;
+        backdrop-filter: blur(20px);
+        border-right: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    
+    /* Text color overrides for dark theme */
+    h1, h2, h3, h4, h5, h6, p, span, div {
+        color: #f8fafc;
+    }
+    .stMarkdown p, .stMarkdown div {
+        color: #cbd5e1 !important;
     }
     
     /* Sleek Buttons */
     .stButton>button {
         background: linear-gradient(90deg, #10b981 0%, #059669 100%);
-        color: white;
+        color: white !important;
         border-radius: 12px;
         padding: 12px 28px;
         font-weight: 600;
-        border: none;
+        border: 1px solid rgba(16, 185, 129, 0.2);
         box-shadow: 0 4px 14px 0 rgba(16, 185, 129, 0.39);
-        transition: all 0.3s ease;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
     .stButton>button:hover {
         transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(16, 185, 129, 0.5);
+        box-shadow: 0 6px 20px rgba(16, 185, 129, 0.6);
     }
     
     /* Modern Glassmorphism Cards */
     .disease-card {
-        background: rgba(255, 255, 255, 0.85);
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
+        background: rgba(15, 23, 42, 0.6);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
         padding: 24px;
         border-radius: 16px;
-        border: 1px solid rgba(255, 255, 255, 0.5);
-        box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
         margin: 20px 0;
-        transition: transform 0.3s ease;
+        transition: transform 0.3s ease, border-color 0.3s ease;
+        animation: fadeInUp 0.6s ease-out forwards;
     }
     .disease-card:hover {
-        transform: scale(1.02);
+        transform: translateY(-5px);
+        border-color: rgba(16, 185, 129, 0.4);
     }
     
     /* Typography */
     .healthy-text {
-        color: #10b981;
+        color: #34d399 !important;
         font-weight: 800;
         text-transform: uppercase;
-        letter-spacing: 1px;
+        letter-spacing: 1.5px;
+        text-shadow: 0 0 10px rgba(52, 211, 153, 0.3);
     }
     .disease-text {
-        color: #ef4444;
+        color: #f87171 !important;
         font-weight: 800;
         text-transform: uppercase;
-        letter-spacing: 1px;
+        letter-spacing: 1.5px;
+        text-shadow: 0 0 10px rgba(248, 113, 113, 0.3);
+        animation: pulse 2s infinite;
+    }
+    
+    /* Keyframe Animations */
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    @keyframes pulse {
+        0% { text-shadow: 0 0 5px rgba(248, 113, 113, 0.2); }
+        50% { text-shadow: 0 0 20px rgba(248, 113, 113, 0.6); }
+        100% { text-shadow: 0 0 5px rgba(248, 113, 113, 0.2); }
     }
     </style>
 """, unsafe_allow_html=True)
@@ -171,17 +212,18 @@ def main():
         st.info("💡 **Tip:** If you haven't trained the model yet, please run `python train.py` first with a valid dataset.")
         st.stop()
 
-    st.markdown("#### Input Leaf Image")
-    
-    input_source = st.radio("Select Input Method:", ["Upload File(s)", "Take a Picture"], horizontal=True)
+    st.markdown("#### 📷 Input Leaf Image")
     
     images_to_process = []
     
-    if input_source == "Upload File(s)":
+    tab1, tab2 = st.tabs(["📁 Upload Image(s)", "📸 Take a Photo"])
+    
+    with tab1:
         uploaded_files = st.file_uploader("Choose images...", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
         if uploaded_files:
             images_to_process.extend(uploaded_files)
-    else:
+            
+    with tab2:
         camera_img = st.camera_input("Take a picture of the plant leaf")
         if camera_img:
             camera_img.name = "camera_capture.jpg"
@@ -228,9 +270,15 @@ def main():
                             
                             st.markdown(f"### {status_icon} Status: <span class='{status_color}'>{disease_class.replace('_', ' ')}</span>", unsafe_allow_html=True)
                             
-                            st.markdown("**Confidence Score:**")
+                            st.markdown("**AI Confidence:**")
                             st.progress(confidence)
                             st.write(f"{confidence * 100:.2f}%")
+                            
+                            # Calculate and display Severity Index
+                            if not is_healthy:
+                                severity_index = float(confidence) # Mock severity based on confidence
+                                st.markdown(f"**🔥 Severity Index:** High ({severity_index * 100:.1f}%)" if severity_index > 0.8 else f"**⚠️ Severity Index:** Moderate ({severity_index * 100:.1f}%)")
+                                st.progress(severity_index)
                             
                             st.markdown("</div>", unsafe_allow_html=True)
                             
@@ -270,17 +318,22 @@ def main():
                             
                             # Display Disease Information if not healthy
                             if not is_healthy:
-                                st.markdown("### 📖 Disease Information")
-                                info_tabs = st.tabs(["Description", "Symptoms", "Causes", "Prevention/Care"])
+                                st.markdown("### 🤖 AI Agronomist Analysis")
                                 
-                                with info_tabs[0]:
+                                with st.chat_message("assistant", avatar="🌿"):
+                                    st.write(f"Hello! I detected **{disease_class.replace('_', ' ')}** on your plant. Here is my analysis:")
+                                    
+                                    st.markdown("#### 🔬 What is it?")
                                     st.write(info["description"])
-                                with info_tabs[1]:
+                                    
+                                    st.markdown("#### ⚠️ Symptoms to look for:")
                                     st.write(info["symptoms"])
-                                with info_tabs[2]:
+                                    
+                                    st.markdown("#### 🌱 Root Causes:")
                                     st.write(info["causes"])
-                                with info_tabs[3]:
-                                    st.write(info["prevention"])
+                                    
+                                    st.markdown("#### 🛡️ Action Plan (Prevention & Care):")
+                                    st.info(info["prevention"])
                                     
                     except Exception as e:
                         st.error(f"An error occurred while processing {uploaded_file.name}: {str(e)}")
