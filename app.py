@@ -5,9 +5,10 @@ import os
 import cv2
 import numpy as np
 from predict import PlantDiseasePredictor
-from utils.db import add_prediction, get_recent_predictions, get_summary_stats
+from utils.db import add_prediction, get_recent_predictions, get_summary_stats, get_disease_distribution, get_daily_trends, get_all_predictions_df
 from utils.pdf_generator import generate_pdf_report
 import pandas as pd
+import datetime
 
 # Set page configuration for a modern look
 st.set_page_config(
@@ -170,14 +171,10 @@ def main():
         )
         st.markdown("---")
         
-        # Display Prediction History from Database
-        st.markdown("### 📊 Dashboard Metrics")
-        stats = get_summary_stats()
-        col1, col2 = st.columns(2)
-        col1.metric("Total Scans", stats["total"])
-        health_ratio = (stats["healthy"] / stats["total"] * 100) if stats["total"] > 0 else 0
-        col2.metric("Health Ratio", f"{health_ratio:.1f}%")
+        page = st.radio("Navigation", ["📸 Disease Scanner", "📊 Analytics Dashboard"])
+        st.markdown("---")
         
+        # Display Prediction History from Database
         st.markdown("### 🕒 Recent History")
         history = get_recent_predictions(limit=5)
         if len(history) == 0:
@@ -191,7 +188,59 @@ def main():
         st.markdown("---")
         st.warning("⚠️ **Disclaimer:** This is an educational tool and should not replace professional agricultural advice.")
 
-    # Main Content
+    # Analytics Dashboard View
+    if page == "📊 Analytics Dashboard":
+        st.title("📊 Analytics Dashboard")
+        st.markdown("### Monitor crop health trends and historical data.")
+        
+        stats = get_summary_stats()
+        
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Total Scans", stats["total"])
+        col2.metric("Diseased Plants", stats["diseased"])
+        health_ratio = (stats["healthy"] / stats["total"] * 100) if stats["total"] > 0 else 0
+        col3.metric("Overall Health Ratio", f"{health_ratio:.1f}%")
+        
+        st.markdown("---")
+        
+        col_chart1, col_chart2 = st.columns(2)
+        
+        with col_chart1:
+            st.markdown("#### 🦠 Disease Distribution")
+            dist = get_disease_distribution()
+            if dist:
+                df_dist = pd.DataFrame(list(dist.items()), columns=['Disease', 'Count']).set_index('Disease')
+                st.bar_chart(df_dist, color="#f87171")
+            else:
+                st.info("No disease data available yet.")
+                
+        with col_chart2:
+            st.markdown("#### 📈 Scanning Activity Over Time")
+            trends = get_daily_trends()
+            if trends:
+                df_trends = pd.DataFrame(list(trends.items()), columns=['Date', 'Scans']).set_index('Date')
+                st.line_chart(df_trends, color="#10b981")
+            else:
+                st.info("No trend data available yet.")
+                
+        st.markdown("---")
+        st.markdown("#### 🗄️ Raw Data Export")
+        df_all = get_all_predictions_df()
+        
+        st.dataframe(df_all, use_container_width=True)
+        
+        if not df_all.empty:
+            csv = df_all.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Download Data as CSV",
+                data=csv,
+                file_name=f'plantguard_history_{datetime.datetime.now().strftime("%Y%m%d")}.csv',
+                mime='text/csv',
+            )
+        
+        return # Stop execution of the scanner
+
+    # Scanner View Content
     st.title("🌿 Plant Disease Detection System")
     st.markdown("### Identify plant diseases instantly using Artificial Intelligence.")
 

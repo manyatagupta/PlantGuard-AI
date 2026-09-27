@@ -1,5 +1,6 @@
 import sqlite3
 import datetime
+import pandas as pd
 
 DB_FILE = "history.db"
 
@@ -67,3 +68,25 @@ def get_summary_stats():
         "healthy": healthy,
         "diseased": diseased
     }
+
+def get_disease_distribution():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT predicted_class, COUNT(*) FROM predictions WHERE is_healthy = 0 GROUP BY predicted_class ORDER BY COUNT(*) DESC")
+    rows = c.fetchall()
+    conn.close()
+    return {row[0].replace('_', ' '): row[1] for row in rows}
+
+def get_daily_trends():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT substr(timestamp, 1, 10) as date, COUNT(*) FROM predictions GROUP BY date ORDER BY date")
+    rows = c.fetchall()
+    conn.close()
+    return {row[0]: row[1] for row in rows}
+
+def get_all_predictions_df():
+    conn = sqlite3.connect(DB_FILE)
+    df = pd.read_sql_query("SELECT * FROM predictions ORDER BY id DESC", conn)
+    conn.close()
+    return df
