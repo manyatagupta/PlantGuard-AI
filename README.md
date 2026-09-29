@@ -108,3 +108,4 @@ Once the model is trained (or if you already have the `.keras` file in the `mode
 - **Wider Dataset**: Include more plant species and diseases.
 - **Mobile App**: Port the model using TensorFlow Lite for an offline mobile application.
 <!-- formatting 1 -->
+<!-- formatting 2 -->
