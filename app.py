@@ -171,7 +171,7 @@ def main():
         )
         st.markdown("---")
         
-        page = st.radio("Navigation", ["📸 Disease Scanner", "📊 Analytics Dashboard"])
+        page = st.radio("Navigation", ["📸 Disease Scanner", "📊 Analytics Dashboard", "💬 AI Plant Assistant"])
         st.markdown("---")
         
         # Display Prediction History from Database
@@ -192,6 +192,16 @@ def main():
     if page == "📊 Analytics Dashboard":
         st.title("📊 Analytics Dashboard")
         st.markdown("### Monitor crop health trends and historical data.")
+        
+        # Interactive filters for UI enhancement
+        col_f1, col_f2 = st.columns(2)
+        with col_f1:
+            date_range = st.selectbox("📅 Select Time Range", ["Last 7 Days", "Last 30 Days", "All Time"], index=2)
+        with col_f2:
+            crop_filter = st.selectbox("🌱 Filter by Crop", ["All Crops", "Apple", "Potato", "Tomato", "Grape", "Corn"])
+            
+        st.markdown(f"**Showing data for:** {date_range} | {crop_filter}")
+        st.markdown("---")
         
         stats = get_summary_stats()
         
@@ -239,6 +249,34 @@ def main():
             )
         
         return # Stop execution of the scanner
+
+    # AI Assistant View
+    if page == "💬 AI Plant Assistant":
+        st.title("💬 AI Plant Assistant")
+        st.markdown("### Ask any questions about plant care, diseases, and gardening!")
+        
+        if "messages" not in st.session_state:
+            st.session_state.messages = [
+                {"role": "assistant", "content": "Hello! I am your PlantGuard AI assistant. How can I help your plants today?"}
+            ]
+            
+        for msg in st.session_state.messages:
+            with st.chat_message(msg["role"], avatar="🌿" if msg["role"] == "assistant" else "🧑‍🌾"):
+                st.write(msg["content"])
+                
+        if prompt := st.chat_input("Ask about fertilizers, watering, specific diseases..."):
+            st.session_state.messages.append({"role": "user", "content": prompt})
+            with st.chat_message("user", avatar="🧑‍🌾"):
+                st.write(prompt)
+                
+            # Simulated response
+            with st.chat_message("assistant", avatar="🌿"):
+                with st.spinner("Thinking..."):
+                    time.sleep(1)
+                    response = f"That's a great question about '{prompt}'. To provide the best care, ensure your plants have adequate sunlight, proper drainage, and the right nutrients. If you suspect a disease, use our 📸 Disease Scanner tab for a precise AI diagnosis!"
+                    st.write(response)
+            st.session_state.messages.append({"role": "assistant", "content": response})
+        return
 
     # Scanner View Content
     st.title("🌿 Plant Disease Detection System")
@@ -372,17 +410,26 @@ def main():
                                 with st.chat_message("assistant", avatar="🌿"):
                                     st.write(f"Hello! I detected **{disease_class.replace('_', ' ')}** on your plant. Here is my analysis:")
                                     
-                                    st.markdown("#### 🔬 What is it?")
-                                    st.write(info["description"])
+                                    info_tab1, info_tab2, info_tab3, info_tab4 = st.tabs(["🔬 What is it?", "⚠️ Symptoms", "🌱 Root Causes", "🛡️ Action Plan"])
                                     
-                                    st.markdown("#### ⚠️ Symptoms to look for:")
-                                    st.write(info["symptoms"])
-                                    
-                                    st.markdown("#### 🌱 Root Causes:")
-                                    st.write(info["causes"])
-                                    
-                                    st.markdown("#### 🛡️ Action Plan (Prevention & Care):")
-                                    st.info(info["prevention"])
+                                    with info_tab1:
+                                        st.write(info["description"])
+                                    with info_tab2:
+                                        st.write(info["symptoms"])
+                                    with info_tab3:
+                                        st.write(info["causes"])
+                                    with info_tab4:
+                                        st.info(info["prevention"])
+                                        
+                            st.markdown("---")
+                            st.write("**Was this prediction helpful?**")
+                            fb_col1, fb_col2 = st.columns(2)
+                            with fb_col1:
+                                if st.button("👍 Yes, spot on!", key=f"yes_{uploaded_file.name}", use_container_width=True):
+                                    st.toast("Thank you for your feedback! 🌟")
+                            with fb_col2:
+                                if st.button("👎 No, incorrect", key=f"no_{uploaded_file.name}", use_container_width=True):
+                                    st.toast("Thanks, we will use this to improve our model! 🛠️")
                                     
                     except Exception as e:
                         st.error(f"An error occurred while processing {uploaded_file.name}: {str(e)}")
