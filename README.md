@@ -109,3 +109,4 @@ Once the model is trained (or if you already have the `.keras` file in the `mode
 - **Mobile App**: Port the model using TensorFlow Lite for an offline mobile application.
 <!-- formatting 1 -->
 <!-- formatting 2 -->
+<!-- formatting 3 -->
