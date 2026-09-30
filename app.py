@@ -22,26 +22,54 @@ st.set_page_config(
 st.markdown("""
     <style>
     /* Global Background and Fonts */
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
     
     html, body, [class*="css"] {
-        font-family: 'Inter', sans-serif;
+        font-family: 'Outfit', sans-serif;
     }
     
-    /* Premium Dark-Nature Theme for Main Background */
+    /* Premium Animated Dark-Nature Theme for Main Background */
     .stApp {
-        background: radial-gradient(circle at 10% 20%, #064e3b 0%, #020617 100%);
+        background: linear-gradient(-45deg, #022c22, #064e3b, #0f172a, #020617);
+        background-size: 400% 400%;
+        animation: gradientBG 15s ease infinite;
         color: #f1f5f9;
+    }
+
+    @keyframes gradientBG {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
     }
     
     /* Sidebar styling */
     [data-testid="stSidebar"] {
-        background-color: rgba(2, 6, 23, 0.6) !important;
-        backdrop-filter: blur(20px);
-        border-right: 1px solid rgba(255, 255, 255, 0.05);
+        background-color: rgba(2, 6, 23, 0.4) !important;
+        backdrop-filter: blur(25px);
+        -webkit-backdrop-filter: blur(25px);
+        border-right: 1px solid rgba(255, 255, 255, 0.08);
     }
     
-    /* Text color overrides for dark theme */
+    /* Header hero text */
+    .hero-title {
+        font-size: 4rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #34d399 0%, #059669 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0px;
+        padding-bottom: 0px;
+        letter-spacing: -1px;
+    }
+    .hero-subtitle {
+        font-size: 1.3rem;
+        color: #94a3b8;
+        font-weight: 300;
+        margin-top: 5px;
+        margin-bottom: 30px;
+    }
+    
+    /* Text color overrides */
     h1, h2, h3, h4, h5, h6, p, span, div {
         color: #f8fafc;
     }
@@ -51,71 +79,110 @@ st.markdown("""
     
     /* Sleek Buttons */
     .stButton>button {
-        background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
         color: white !important;
         border-radius: 12px;
         padding: 12px 28px;
         font-weight: 600;
-        border: 1px solid rgba(16, 185, 129, 0.2);
-        box-shadow: 0 4px 14px 0 rgba(16, 185, 129, 0.39);
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        border: none;
+        box-shadow: 0 8px 16px rgba(16, 185, 129, 0.2);
+        transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     }
     .stButton>button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(16, 185, 129, 0.6);
+        transform: translateY(-4px) scale(1.02);
+        box-shadow: 0 12px 24px rgba(16, 185, 129, 0.4);
+    }
+    
+    /* Dashboard Custom Metrics Card */
+    .metric-card {
+        background: rgba(15, 23, 42, 0.7);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 16px;
+        padding: 24px;
+        text-align: center;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        transition: transform 0.3s ease;
+    }
+    .metric-card:hover {
+        transform: translateY(-5px);
+        border-color: #10b981;
+    }
+    .metric-title {
+        font-size: 1.1rem;
+        color: #94a3b8;
+        font-weight: 500;
+        margin-bottom: 8px;
+    }
+    .metric-value {
+        font-size: 2.5rem;
+        font-weight: 800;
+        color: #34d399;
     }
     
     /* Modern Glassmorphism Cards */
     .disease-card {
-        background: rgba(15, 23, 42, 0.6);
-        backdrop-filter: blur(16px);
-        -webkit-backdrop-filter: blur(16px);
-        padding: 24px;
-        border-radius: 16px;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
-        margin: 20px 0;
-        transition: transform 0.3s ease, border-color 0.3s ease;
+        background: rgba(30, 41, 59, 0.7);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        padding: 30px;
+        border-radius: 20px;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        box-shadow: 0 10px 40px 0 rgba(0, 0, 0, 0.4);
+        margin: 25px 0;
+        transition: all 0.4s ease;
         animation: fadeInUp 0.6s ease-out forwards;
+        position: relative;
+        overflow: hidden;
+    }
+    .disease-card::before {
+        content: '';
+        position: absolute;
+        top: 0; left: -100%;
+        width: 50%; height: 100%;
+        background: linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,0.05) 50%, rgba(255,255,255,0) 100%);
+        transform: skewX(-25deg);
+        animation: shine 6s infinite;
     }
     .disease-card:hover {
-        transform: translateY(-5px);
-        border-color: rgba(16, 185, 129, 0.4);
+        transform: translateY(-8px);
+        border-color: rgba(16, 185, 129, 0.6);
+        box-shadow: 0 15px 50px 0 rgba(16, 185, 129, 0.2);
     }
     
     /* Typography */
     .healthy-text {
-        color: #34d399 !important;
+        color: #10b981 !important;
         font-weight: 800;
+        font-size: 1.6rem;
         text-transform: uppercase;
-        letter-spacing: 1.5px;
-        text-shadow: 0 0 10px rgba(52, 211, 153, 0.3);
+        letter-spacing: 2px;
+        text-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
     }
     .disease-text {
-        color: #f87171 !important;
+        color: #ef4444 !important;
         font-weight: 800;
+        font-size: 1.6rem;
         text-transform: uppercase;
-        letter-spacing: 1.5px;
-        text-shadow: 0 0 10px rgba(248, 113, 113, 0.3);
-        animation: pulse 2s infinite;
+        letter-spacing: 2px;
+        text-shadow: 0 0 15px rgba(239, 68, 68, 0.4);
+        animation: pulseRed 2s infinite;
     }
     
     /* Keyframe Animations */
     @keyframes fadeInUp {
-        from {
-            opacity: 0;
-            transform: translateY(20px);
-        }
-        to {
-            opacity: 1;
-            transform: translateY(0);
-        }
+        from { opacity: 0; transform: translateY(30px); }
+        to { opacity: 1; transform: translateY(0); }
     }
-    
-    @keyframes pulse {
-        0% { text-shadow: 0 0 5px rgba(248, 113, 113, 0.2); }
-        50% { text-shadow: 0 0 20px rgba(248, 113, 113, 0.6); }
-        100% { text-shadow: 0 0 5px rgba(248, 113, 113, 0.2); }
+    @keyframes shine {
+        0% { left: -100%; }
+        20% { left: 200%; }
+        100% { left: 200%; }
+    }
+    @keyframes pulseRed {
+        0% { text-shadow: 0 0 5px rgba(239, 68, 68, 0.3); }
+        50% { text-shadow: 0 0 25px rgba(239, 68, 68, 0.7); }
+        100% { text-shadow: 0 0 5px rgba(239, 68, 68, 0.3); }
     }
     </style>
 """, unsafe_allow_html=True)
@@ -206,10 +273,13 @@ def main():
         stats = get_summary_stats()
         
         col1, col2, col3 = st.columns(3)
-        col1.metric("Total Scans", stats["total"])
-        col2.metric("Diseased Plants", stats["diseased"])
-        health_ratio = (stats["healthy"] / stats["total"] * 100) if stats["total"] > 0 else 0
-        col3.metric("Overall Health Ratio", f"{health_ratio:.1f}%")
+        with col1:
+            st.markdown(f'<div class="metric-card"><div class="metric-title">Total Scans</div><div class="metric-value">{stats["total"]}</div></div>', unsafe_allow_html=True)
+        with col2:
+            st.markdown(f'<div class="metric-card"><div class="metric-title">Diseased Plants</div><div class="metric-value" style="color:#ef4444">{stats["diseased"]}</div></div>', unsafe_allow_html=True)
+        with col3:
+            health_ratio = (stats["healthy"] / stats["total"] * 100) if stats["total"] > 0 else 0
+            st.markdown(f'<div class="metric-card"><div class="metric-title">Overall Health Ratio</div><div class="metric-value">{health_ratio:.1f}%</div></div>', unsafe_allow_html=True)
         
         st.markdown("---")
         
@@ -279,8 +349,9 @@ def main():
         return
 
     # Scanner View Content
-    st.title("🌿 Plant Disease Detection System")
-    st.markdown("### Identify plant diseases instantly using Artificial Intelligence.")
+    st.markdown('<div class="hero-title">🌿 PlantGuard AI</div>', unsafe_allow_html=True)
+    st.markdown('<div class="hero-subtitle">Next-Generation Plant Disease Detection powered by Artificial Intelligence.</div>', unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
 
     # Model Initialization
     @st.cache_resource
