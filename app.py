@@ -44,29 +44,31 @@ st.markdown("""
     
     /* Sidebar styling */
     [data-testid="stSidebar"] {
-        background-color: rgba(2, 6, 23, 0.4) !important;
+        background: linear-gradient(180deg, rgba(2, 6, 23, 0.6) 0%, rgba(6, 78, 59, 0.4) 100%) !important;
         backdrop-filter: blur(25px);
         -webkit-backdrop-filter: blur(25px);
-        border-right: 1px solid rgba(255, 255, 255, 0.08);
+        border-right: 1px solid rgba(255, 255, 255, 0.1);
     }
     
     /* Header hero text */
     .hero-title {
-        font-size: 4rem;
+        font-size: 4.5rem;
         font-weight: 800;
-        background: linear-gradient(135deg, #34d399 0%, #059669 100%);
+        background: linear-gradient(135deg, #34d399 0%, #10b981 50%, #059669 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         margin-bottom: 0px;
         padding-bottom: 0px;
-        letter-spacing: -1px;
+        letter-spacing: -2px;
+        text-shadow: 0 10px 30px rgba(16, 185, 129, 0.3);
     }
     .hero-subtitle {
-        font-size: 1.3rem;
+        font-size: 1.4rem;
         color: #94a3b8;
         font-weight: 300;
         margin-top: 5px;
-        margin-bottom: 30px;
+        margin-bottom: 40px;
+        letter-spacing: 0.5px;
     }
     
     /* Text color overrides */
@@ -74,64 +76,109 @@ st.markdown("""
         color: #f8fafc;
     }
     .stMarkdown p, .stMarkdown div {
-        color: #cbd5e1 !important;
+        color: #e2e8f0 !important;
     }
     
-    /* Sleek Buttons */
+    /* Sleek Buttons with Neon Glow */
     .stButton>button {
         background: linear-gradient(135deg, #10b981 0%, #059669 100%);
         color: white !important;
-        border-radius: 12px;
+        border-radius: 14px;
         padding: 12px 28px;
         font-weight: 600;
-        border: none;
-        box-shadow: 0 8px 16px rgba(16, 185, 129, 0.2);
+        border: 1px solid rgba(255,255,255,0.2);
+        box-shadow: 0 8px 16px rgba(16, 185, 129, 0.2), inset 0 2px 4px rgba(255,255,255,0.2);
         transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     }
     .stButton>button:hover {
-        transform: translateY(-4px) scale(1.02);
-        box-shadow: 0 12px 24px rgba(16, 185, 129, 0.4);
+        transform: translateY(-4px) scale(1.03);
+        box-shadow: 0 12px 24px rgba(16, 185, 129, 0.4), 0 0 15px rgba(16, 185, 129, 0.6);
+        border: 1px solid rgba(255,255,255,0.4);
+    }
+    
+    /* File Uploader styling */
+    [data-testid="stFileUploadDropzone"] {
+        background: rgba(15, 23, 42, 0.6) !important;
+        border: 2px dashed rgba(52, 211, 153, 0.5) !important;
+        border-radius: 20px !important;
+        backdrop-filter: blur(10px) !important;
+        transition: all 0.3s ease !important;
+        padding: 40px !important;
+    }
+    [data-testid="stFileUploadDropzone"]:hover {
+        background: rgba(15, 23, 42, 0.8) !important;
+        border-color: #34d399 !important;
+        box-shadow: 0 0 25px rgba(52, 211, 153, 0.25) !important;
+    }
+
+    /* Tabs styling */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 20px;
+        background: rgba(15, 23, 42, 0.4);
+        padding: 10px 20px;
+        border-radius: 16px;
+        backdrop-filter: blur(10px);
+        margin-bottom: 20px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        background-color: transparent !important;
+        border-radius: 8px;
+        padding: 10px 20px;
+    }
+    .stTabs [aria-selected="true"] {
+        background: rgba(16, 185, 129, 0.2) !important;
+        border: 1px solid rgba(16, 185, 129, 0.5) !important;
+        color: #34d399 !important;
+        box-shadow: 0 0 15px rgba(16, 185, 129, 0.1);
     }
     
     /* Dashboard Custom Metrics Card */
     .metric-card {
         background: rgba(15, 23, 42, 0.7);
-        backdrop-filter: blur(12px);
+        backdrop-filter: blur(16px);
         border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 16px;
-        padding: 24px;
+        border-top: 1px solid rgba(255, 255, 255, 0.2);
+        border-left: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 20px;
+        padding: 28px 24px;
         text-align: center;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-        transition: transform 0.3s ease;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        transition: transform 0.4s ease, box-shadow 0.4s ease;
     }
     .metric-card:hover {
-        transform: translateY(-5px);
-        border-color: #10b981;
+        transform: translateY(-8px);
+        border-color: rgba(52, 211, 153, 0.5);
+        box-shadow: 0 12px 40px rgba(16, 185, 129, 0.2);
     }
     .metric-title {
-        font-size: 1.1rem;
-        color: #94a3b8;
+        font-size: 1.15rem;
+        color: #cbd5e1;
         font-weight: 500;
-        margin-bottom: 8px;
+        margin-bottom: 12px;
+        letter-spacing: 0.5px;
     }
     .metric-value {
-        font-size: 2.5rem;
+        font-size: 2.8rem;
         font-weight: 800;
-        color: #34d399;
+        background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        text-shadow: 0 2px 10px rgba(16, 185, 129, 0.2);
     }
     
     /* Modern Glassmorphism Cards */
     .disease-card {
-        background: rgba(30, 41, 59, 0.7);
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
-        padding: 30px;
-        border-radius: 20px;
-        border: 1px solid rgba(255, 255, 255, 0.15);
-        box-shadow: 0 10px 40px 0 rgba(0, 0, 0, 0.4);
-        margin: 25px 0;
-        transition: all 0.4s ease;
-        animation: fadeInUp 0.6s ease-out forwards;
+        background: linear-gradient(145deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.9));
+        backdrop-filter: blur(25px);
+        -webkit-backdrop-filter: blur(25px);
+        padding: 35px;
+        border-radius: 24px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-top: 1px solid rgba(255, 255, 255, 0.2);
+        box-shadow: 0 15px 50px 0 rgba(0, 0, 0, 0.5);
+        margin: 30px 0;
+        transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        animation: fadeInUp 0.8s ease-out forwards;
         position: relative;
         overflow: hidden;
     }
@@ -140,39 +187,39 @@ st.markdown("""
         position: absolute;
         top: 0; left: -100%;
         width: 50%; height: 100%;
-        background: linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,0.05) 50%, rgba(255,255,255,0) 100%);
+        background: linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0) 100%);
         transform: skewX(-25deg);
         animation: shine 6s infinite;
     }
     .disease-card:hover {
-        transform: translateY(-8px);
-        border-color: rgba(16, 185, 129, 0.6);
-        box-shadow: 0 15px 50px 0 rgba(16, 185, 129, 0.2);
+        transform: translateY(-10px) scale(1.01);
+        border-color: rgba(52, 211, 153, 0.6);
+        box-shadow: 0 20px 60px 0 rgba(16, 185, 129, 0.25), inset 0 0 20px rgba(16, 185, 129, 0.05);
     }
     
     /* Typography */
     .healthy-text {
-        color: #10b981 !important;
+        color: #34d399 !important;
         font-weight: 800;
-        font-size: 1.6rem;
+        font-size: 1.8rem;
         text-transform: uppercase;
-        letter-spacing: 2px;
-        text-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
+        letter-spacing: 2.5px;
+        text-shadow: 0 0 20px rgba(52, 211, 153, 0.5);
     }
     .disease-text {
-        color: #ef4444 !important;
+        color: #f87171 !important;
         font-weight: 800;
-        font-size: 1.6rem;
+        font-size: 1.8rem;
         text-transform: uppercase;
-        letter-spacing: 2px;
-        text-shadow: 0 0 15px rgba(239, 68, 68, 0.4);
-        animation: pulseRed 2s infinite;
+        letter-spacing: 2.5px;
+        text-shadow: 0 0 20px rgba(248, 113, 113, 0.5);
+        animation: pulseRed 2.5s infinite;
     }
     
     /* Keyframe Animations */
     @keyframes fadeInUp {
-        from { opacity: 0; transform: translateY(30px); }
-        to { opacity: 1; transform: translateY(0); }
+        from { opacity: 0; transform: translateY(40px) scale(0.98); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
     }
     @keyframes shine {
         0% { left: -100%; }
@@ -180,9 +227,9 @@ st.markdown("""
         100% { left: 200%; }
     }
     @keyframes pulseRed {
-        0% { text-shadow: 0 0 5px rgba(239, 68, 68, 0.3); }
-        50% { text-shadow: 0 0 25px rgba(239, 68, 68, 0.7); }
-        100% { text-shadow: 0 0 5px rgba(239, 68, 68, 0.3); }
+        0% { text-shadow: 0 0 8px rgba(248, 113, 113, 0.4); }
+        50% { text-shadow: 0 0 30px rgba(248, 113, 113, 0.8); }
+        100% { text-shadow: 0 0 8px rgba(248, 113, 113, 0.4); }
     }
     </style>
 """, unsafe_allow_html=True)
