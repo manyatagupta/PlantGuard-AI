@@ -28,12 +28,12 @@ st.markdown("""
         font-family: 'Outfit', sans-serif;
     }
     
-    /* Premium Animated Dark-Nature Theme for Main Background */
+    /* Earthy Light Theme for Main Background */
     .stApp {
-        background: linear-gradient(-45deg, #022c22, #064e3b, #0f172a, #020617);
+        background: linear-gradient(-45deg, #f0fdf4, #dcfce7, #fdf8f6, #ecfdf5);
         background-size: 400% 400%;
         animation: gradientBG 15s ease infinite;
-        color: #f1f5f9;
+        color: #1e293b;
     }
 
     @keyframes gradientBG {
@@ -44,28 +44,28 @@ st.markdown("""
     
     /* Sidebar styling */
     [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, rgba(2, 6, 23, 0.6) 0%, rgba(6, 78, 59, 0.4) 100%) !important;
+        background: linear-gradient(180deg, rgba(240, 253, 244, 0.8) 0%, rgba(220, 252, 231, 0.7) 100%) !important;
         backdrop-filter: blur(25px);
         -webkit-backdrop-filter: blur(25px);
-        border-right: 1px solid rgba(255, 255, 255, 0.1);
+        border-right: 1px solid rgba(20, 83, 45, 0.1);
     }
     
     /* Header hero text */
     .hero-title {
         font-size: 4.5rem;
         font-weight: 800;
-        background: linear-gradient(135deg, #34d399 0%, #10b981 50%, #059669 100%);
+        background: linear-gradient(135deg, #166534 0%, #15803d 50%, #14532d 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         margin-bottom: 0px;
         padding-bottom: 0px;
         letter-spacing: -2px;
-        text-shadow: 0 10px 30px rgba(16, 185, 129, 0.3);
+        text-shadow: 0 4px 10px rgba(21, 128, 61, 0.1);
     }
     .hero-subtitle {
         font-size: 1.4rem;
-        color: #94a3b8;
-        font-weight: 300;
+        color: #475569;
+        font-weight: 400;
         margin-top: 5px;
         margin-bottom: 40px;
         letter-spacing: 0.5px;
@@ -73,52 +73,53 @@ st.markdown("""
     
     /* Text color overrides */
     h1, h2, h3, h4, h5, h6, p, span, div {
-        color: #f8fafc;
+        color: #1e293b;
     }
     .stMarkdown p, .stMarkdown div {
-        color: #e2e8f0 !important;
+        color: #334155 !important;
     }
     
-    /* Sleek Buttons with Neon Glow */
+    /* Sleek Buttons with Earthy Tone */
     .stButton>button {
-        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        background: linear-gradient(135deg, #15803d 0%, #166534 100%);
         color: white !important;
         border-radius: 14px;
         padding: 12px 28px;
         font-weight: 600;
-        border: 1px solid rgba(255,255,255,0.2);
-        box-shadow: 0 8px 16px rgba(16, 185, 129, 0.2), inset 0 2px 4px rgba(255,255,255,0.2);
+        border: 1px solid rgba(255,255,255,0.4);
+        box-shadow: 0 4px 10px rgba(22, 101, 52, 0.2), inset 0 2px 4px rgba(255,255,255,0.2);
         transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     }
     .stButton>button:hover {
         transform: translateY(-4px) scale(1.03);
-        box-shadow: 0 12px 24px rgba(16, 185, 129, 0.4), 0 0 15px rgba(16, 185, 129, 0.6);
-        border: 1px solid rgba(255,255,255,0.4);
+        box-shadow: 0 8px 16px rgba(22, 101, 52, 0.3), 0 0 10px rgba(22, 101, 52, 0.4);
+        border: 1px solid rgba(21, 128, 61, 0.5);
     }
     
     /* File Uploader styling */
     [data-testid="stFileUploadDropzone"] {
-        background: rgba(15, 23, 42, 0.6) !important;
-        border: 2px dashed rgba(52, 211, 153, 0.5) !important;
+        background: rgba(255, 255, 255, 0.6) !important;
+        border: 2px dashed rgba(21, 128, 61, 0.4) !important;
         border-radius: 20px !important;
         backdrop-filter: blur(10px) !important;
         transition: all 0.3s ease !important;
         padding: 40px !important;
     }
     [data-testid="stFileUploadDropzone"]:hover {
-        background: rgba(15, 23, 42, 0.8) !important;
-        border-color: #34d399 !important;
-        box-shadow: 0 0 25px rgba(52, 211, 153, 0.25) !important;
+        background: rgba(255, 255, 255, 0.9) !important;
+        border-color: #15803d !important;
+        box-shadow: 0 0 15px rgba(21, 128, 61, 0.15) !important;
     }
 
     /* Tabs styling */
     .stTabs [data-baseweb="tab-list"] {
         gap: 20px;
-        background: rgba(15, 23, 42, 0.4);
+        background: rgba(255, 255, 255, 0.6);
         padding: 10px 20px;
         border-radius: 16px;
         backdrop-filter: blur(10px);
         margin-bottom: 20px;
+        border: 1px solid rgba(20, 83, 45, 0.05);
     }
     .stTabs [data-baseweb="tab"] {
         background-color: transparent !important;
@@ -126,33 +127,31 @@ st.markdown("""
         padding: 10px 20px;
     }
     .stTabs [aria-selected="true"] {
-        background: rgba(16, 185, 129, 0.2) !important;
-        border: 1px solid rgba(16, 185, 129, 0.5) !important;
-        color: #34d399 !important;
-        box-shadow: 0 0 15px rgba(16, 185, 129, 0.1);
+        background: rgba(21, 128, 61, 0.1) !important;
+        border: 1px solid rgba(21, 128, 61, 0.3) !important;
+        color: #15803d !important;
+        box-shadow: 0 0 10px rgba(21, 128, 61, 0.05);
     }
     
     /* Dashboard Custom Metrics Card */
     .metric-card {
-        background: rgba(15, 23, 42, 0.7);
+        background: rgba(255, 255, 255, 0.85);
         backdrop-filter: blur(16px);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-top: 1px solid rgba(255, 255, 255, 0.2);
-        border-left: 1px solid rgba(255, 255, 255, 0.2);
+        border: 1px solid rgba(20, 83, 45, 0.1);
         border-radius: 20px;
         padding: 28px 24px;
         text-align: center;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.05);
         transition: transform 0.4s ease, box-shadow 0.4s ease;
     }
     .metric-card:hover {
         transform: translateY(-8px);
-        border-color: rgba(52, 211, 153, 0.5);
-        box-shadow: 0 12px 40px rgba(16, 185, 129, 0.2);
+        border-color: rgba(21, 128, 61, 0.3);
+        box-shadow: 0 12px 30px rgba(21, 128, 61, 0.15);
     }
     .metric-title {
         font-size: 1.15rem;
-        color: #cbd5e1;
+        color: #64748b;
         font-weight: 500;
         margin-bottom: 12px;
         letter-spacing: 0.5px;
@@ -160,22 +159,21 @@ st.markdown("""
     .metric-value {
         font-size: 2.8rem;
         font-weight: 800;
-        background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+        background: linear-gradient(135deg, #15803d 0%, #166534 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        text-shadow: 0 2px 10px rgba(16, 185, 129, 0.2);
+        text-shadow: 0 2px 10px rgba(21, 128, 61, 0.1);
     }
     
     /* Modern Glassmorphism Cards */
     .disease-card {
-        background: linear-gradient(145deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.9));
+        background: linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.98));
         backdrop-filter: blur(25px);
         -webkit-backdrop-filter: blur(25px);
         padding: 35px;
         border-radius: 24px;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-top: 1px solid rgba(255, 255, 255, 0.2);
-        box-shadow: 0 15px 50px 0 rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(20, 83, 45, 0.1);
+        box-shadow: 0 15px 40px 0 rgba(0, 0, 0, 0.08);
         margin: 30px 0;
         transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         animation: fadeInUp 0.8s ease-out forwards;
@@ -187,32 +185,32 @@ st.markdown("""
         position: absolute;
         top: 0; left: -100%;
         width: 50%; height: 100%;
-        background: linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0) 100%);
+        background: linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,0.8) 50%, rgba(255,255,255,0) 100%);
         transform: skewX(-25deg);
         animation: shine 6s infinite;
     }
     .disease-card:hover {
         transform: translateY(-10px) scale(1.01);
-        border-color: rgba(52, 211, 153, 0.6);
-        box-shadow: 0 20px 60px 0 rgba(16, 185, 129, 0.25), inset 0 0 20px rgba(16, 185, 129, 0.05);
+        border-color: rgba(21, 128, 61, 0.4);
+        box-shadow: 0 20px 50px 0 rgba(21, 128, 61, 0.15), inset 0 0 20px rgba(21, 128, 61, 0.05);
     }
     
     /* Typography */
     .healthy-text {
-        color: #34d399 !important;
+        color: #15803d !important;
         font-weight: 800;
         font-size: 1.8rem;
         text-transform: uppercase;
         letter-spacing: 2.5px;
-        text-shadow: 0 0 20px rgba(52, 211, 153, 0.5);
+        text-shadow: 0 0 15px rgba(21, 128, 61, 0.2);
     }
     .disease-text {
-        color: #f87171 !important;
+        color: #b91c1c !important;
         font-weight: 800;
         font-size: 1.8rem;
         text-transform: uppercase;
         letter-spacing: 2.5px;
-        text-shadow: 0 0 20px rgba(248, 113, 113, 0.5);
+        text-shadow: 0 0 15px rgba(185, 28, 28, 0.2);
         animation: pulseRed 2.5s infinite;
     }
     
@@ -227,9 +225,9 @@ st.markdown("""
         100% { left: 200%; }
     }
     @keyframes pulseRed {
-        0% { text-shadow: 0 0 8px rgba(248, 113, 113, 0.4); }
-        50% { text-shadow: 0 0 30px rgba(248, 113, 113, 0.8); }
-        100% { text-shadow: 0 0 8px rgba(248, 113, 113, 0.4); }
+        0% { text-shadow: 0 0 8px rgba(185, 28, 28, 0.2); }
+        50% { text-shadow: 0 0 20px rgba(185, 28, 28, 0.4); }
+        100% { text-shadow: 0 0 8px rgba(185, 28, 28, 0.2); }
     }
     </style>
 """, unsafe_allow_html=True)
