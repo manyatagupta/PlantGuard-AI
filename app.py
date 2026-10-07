@@ -448,7 +448,7 @@ def main():
                         image = Image.open(uploaded_file)
                         
                         with col1:
-                            st.image(image, caption="Uploaded Image", use_container_width=True)
+                            st.image(image, caption="Uploaded Image", use_column_width=True)
                             
                         with col2:
                             results = predictor.predict(image)
@@ -517,7 +517,7 @@ def main():
                             # Display Heatmap Explainability in UI
                             if heatmap_img is not None:
                                 st.markdown("#### 🧠 AI Focus Area (Grad-CAM)")
-                                st.image(heatmap_img, caption="Grad-CAM Heatmap", use_container_width=True)
+                                st.image(heatmap_img, caption="Grad-CAM Heatmap", use_column_width=True)
                             
                             # Display Disease Information if not healthy
                             if not is_healthy:
