@@ -12,12 +12,12 @@ import tensorflow as tf
 from tensorflow.keras.applications import EfficientNetV2B0
 import matplotlib.pyplot as plt
 # Configuration
-DATASET_DIR = "dataset"
+DATASET_DIR = r"C:\Users\manya\Downloads\archive (5)\Dataset"
 MODEL_SAVE_PATH = "models/plant_disease_model.keras"
 ASSETS_DIR = "assets"
 BATCH_SIZE = 32
 IMG_SIZE = (224, 224)
-EPOCHS = 15
+EPOCHS = 5
 LEARNING_RATE = 1e-4
 
 def create_directories():
