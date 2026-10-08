@@ -31,7 +31,7 @@ def preprocess_image(image, target_size=(224, 224)):
     # Add batch dimension
     img_array = np.expand_dims(img_array, axis=0)
     
-    # Preprocess input (MobileNetV2 expects values between -1 and 1)
-    img_array = tf.keras.applications.mobilenet_v2.preprocess_input(img_array)
+    # Note: EfficientNetV2B0 includes its own preprocessing and expects 0-255 inputs.
+    # Therefore, no further scaling is required here.
     
     return img_array

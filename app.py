@@ -419,11 +419,13 @@ def main():
     
     images_to_process = []
     
-    tab1, tab2 = st.tabs(["📁 Upload Image(s)", "📸 Take a Photo"])
+    tab1, tab2, tab3 = st.tabs(["📁 Upload Image(s)", "📸 Take a Photo", "📂 Local Folder"])
     
     with tab1:
         uploaded_files = st.file_uploader("Choose images...", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
         if uploaded_files:
+            if len(uploaded_files) > 20:
+                st.warning("⚠️ Large number of files selected! If Chrome freezes, please use the 'Local Folder' tab instead.")
             images_to_process.extend(uploaded_files)
             
     with tab2:
@@ -431,6 +433,32 @@ def main():
         if camera_img:
             camera_img.name = "camera_capture.jpg"
             images_to_process.append(camera_img)
+            
+    with tab3:
+        st.info("💡 Processing a large dataset? Enter the local folder path here to bypass the browser upload entirely and prevent Chrome from freezing.")
+        folder_path = st.text_input("Enter absolute folder path (e.g., C:\\Users\\...\\Dataset)")
+        if folder_path and os.path.isdir(folder_path):
+            valid_extensions = ('.jpg', '.jpeg', '.png')
+            local_files = [os.path.join(folder_path, f) for f in os.listdir(folder_path) if f.lower().endswith(valid_extensions)]
+            if local_files:
+                st.success(f"Found {len(local_files)} images in folder.")
+                
+                class LocalImageFile:
+                    def __init__(self, path):
+                        self.path = path
+                        self.name = os.path.basename(path)
+                        
+                if st.button(f"Queue Images for Analysis"):
+                    # Limit to a reasonable number to avoid locking up the processing forever
+                    limit = min(len(local_files), 100)
+                    for f in local_files[:limit]:
+                        images_to_process.append(LocalImageFile(f))
+                    if len(local_files) > 100:
+                        st.warning(f"Only the first 100 images were queued to prevent excessive processing time.")
+            else:
+                st.warning("No valid images found in the specified folder.")
+        elif folder_path:
+            st.error("Directory does not exist. Please check the path.")
             
     if images_to_process:
         st.markdown("---")
@@ -445,7 +473,10 @@ def main():
                     col1, col2 = st.columns([1, 2])
                     
                     try:
-                        image = Image.open(uploaded_file)
+                        if hasattr(uploaded_file, 'path'):
+                            image = Image.open(uploaded_file.path)
+                        else:
+                            image = Image.open(uploaded_file)
                         
                         with col1:
                             st.image(image, caption="Uploaded Image", use_column_width=True)
@@ -458,32 +489,41 @@ def main():
                             is_healthy = results['is_healthy']
                             
                             # Confidence Threshold Check
-                            if confidence < 0.50:
-                                st.warning("⚠️ The model is not sufficiently confident. Please upload a clearer leaf image.")
-                                continue
+                            if confidence < 0.20:
+                                st.warning("⚠️ The model has low confidence. Please upload a clearer leaf image for better accuracy.")
                             
                             # Log to Database
                             add_prediction(uploaded_file.name, disease_class.replace('_', ' '), confidence, is_healthy)
                             
                             # Display Results Card
-                            st.markdown("<div class='disease-card'>", unsafe_allow_html=True)
-                            
                             status_color = "healthy-text" if is_healthy else "disease-text"
                             status_icon = "✅" if is_healthy else "🦠"
                             
-                            st.markdown(f"### {status_icon} Status: <span class='{status_color}'>{disease_class.replace('_', ' ')}</span>", unsafe_allow_html=True)
-                            
-                            st.markdown("**AI Confidence:**")
-                            st.progress(confidence)
-                            st.write(f"{confidence * 100:.2f}%")
+                            html_content = f"""
+                            <div class='disease-card'>
+                                <h3 style='margin-bottom: 15px;'>{status_icon} Status: <span class='{status_color}'>{disease_class.replace('_', ' ')}</span></h3>
+                                <div style='margin-bottom: 8px;'><strong>AI Confidence: {confidence * 100:.2f}%</strong></div>
+                                <div style='width: 100%; background-color: #e2e8f0; border-radius: 999px; height: 8px; margin-bottom: 20px;'>
+                                    <div style='background-color: #3b82f6; width: {confidence*100}%; height: 8px; border-radius: 999px;'></div>
+                                </div>
+                            """
                             
                             # Calculate and display Severity Index
                             if not is_healthy:
                                 severity_index = float(confidence) # Mock severity based on confidence
-                                st.markdown(f"**🔥 Severity Index:** High ({severity_index * 100:.1f}%)" if severity_index > 0.8 else f"**⚠️ Severity Index:** Moderate ({severity_index * 100:.1f}%)")
-                                st.progress(severity_index)
-                            
-                            st.markdown("</div>", unsafe_allow_html=True)
+                                severity_label = "High" if severity_index > 0.8 else "Moderate"
+                                severity_icon = "🔥" if severity_index > 0.8 else "⚠️"
+                                severity_color = "#ef4444" if severity_index > 0.8 else "#f59e0b"
+                                
+                                html_content += f"""
+                                <div style='margin-bottom: 8px;'><strong>{severity_icon} Severity Index: {severity_label} ({severity_index * 100:.1f}%)</strong></div>
+                                <div style='width: 100%; background-color: #e2e8f0; border-radius: 999px; height: 8px; margin-bottom: 5px;'>
+                                    <div style='background-color: {severity_color}; width: {severity_index*100}%; height: 8px; border-radius: 999px;'></div>
+                                </div>
+                                """
+                                
+                            html_content += "</div>"
+                            st.markdown(html_content, unsafe_allow_html=True)
                             
                             with st.expander("📊 View Probability Distribution"):
                                 probs = results['all_probabilities']
