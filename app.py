@@ -502,9 +502,9 @@ def main():
                             html_content = f"""
                             <div class='disease-card'>
                                 <h3 style='margin-bottom: 15px;'>{status_icon} Status: <span class='{status_color}'>{disease_class.replace('_', ' ')}</span></h3>
-                                <div style='margin-bottom: 8px;'><strong>AI Confidence: {confidence * 100:.2f}%</strong></div>
-                                <div style='width: 100%; background-color: #e2e8f0; border-radius: 999px; height: 8px; margin-bottom: 20px;'>
-                                    <div style='background-color: #3b82f6; width: {confidence*100}%; height: 8px; border-radius: 999px;'></div>
+                                <div style='margin-bottom: 8px; color: #cbd5e1;'><strong>AI Confidence: {confidence * 100:.2f}%</strong></div>
+                                <div style='width: 100%; background-color: #334155; border-radius: 999px; height: 8px; margin-bottom: 20px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);'>
+                                    <div style='background-color: #10b981; width: {confidence*100}%; height: 8px; border-radius: 999px; box-shadow: 0 0 10px rgba(16,185,129,0.5);'></div>
                                 </div>
                             """
                             
