@@ -516,9 +516,9 @@ def main():
                                 severity_color = "#ef4444" if severity_index > 0.8 else "#f59e0b"
                                 
                                 html_content += f"""
-                                <div style='margin-bottom: 8px;'><strong>{severity_icon} Severity Index: {severity_label} ({severity_index * 100:.1f}%)</strong></div>
-                                <div style='width: 100%; background-color: #e2e8f0; border-radius: 999px; height: 8px; margin-bottom: 5px;'>
-                                    <div style='background-color: {severity_color}; width: {severity_index*100}%; height: 8px; border-radius: 999px;'></div>
+                                <div style='margin-bottom: 8px; color: #cbd5e1;'><strong>{severity_icon} Severity Index: {severity_label} ({severity_index * 100:.1f}%)</strong></div>
+                                <div style='width: 100%; background-color: #334155; border-radius: 999px; height: 8px; margin-bottom: 5px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);'>
+                                    <div style='background-color: {severity_color}; width: {severity_index*100}%; height: 8px; border-radius: 999px; box-shadow: 0 0 10px {severity_color};'></div>
                                 </div>
                                 """
                                 
