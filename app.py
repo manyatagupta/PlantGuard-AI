@@ -67,66 +67,70 @@ st.markdown("""
         letter-spacing: 0.5px;
     }
     
-    /* Text color overrides */
-    h1, h2, h3, h4, h5, h6, p, span, div {
-        color: #1e293b;
+    /* Text color overrides for Dark Mode */
+    h1, h2, h3, h4, h5, h6, span, div {
+        color: #f1f5f9;
     }
     .stMarkdown p, .stMarkdown div {
-        color: #334155 !important;
+        color: #cbd5e1 !important;
     }
     
-    /* Sleek Buttons with Earthy Tone */
+    /* Sleek Buttons with Neon Glow */
     .stButton>button {
-        background: linear-gradient(135deg, #15803d 0%, #166534 100%);
-        color: white !important;
-        border-radius: 14px;
+        background: rgba(16, 185, 129, 0.1);
+        color: #10b981 !important;
+        border-radius: 12px;
         padding: 12px 28px;
         font-weight: 600;
-        border: 1px solid rgba(255,255,255,0.4);
-        box-shadow: 0 4px 10px rgba(22, 101, 52, 0.2), inset 0 2px 4px rgba(255,255,255,0.2);
-        transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        border: 1px solid rgba(16, 185, 129, 0.4);
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        backdrop-filter: blur(10px);
     }
     .stButton>button:hover {
-        transform: translateY(-4px) scale(1.03);
-        box-shadow: 0 8px 16px rgba(22, 101, 52, 0.3), 0 0 10px rgba(22, 101, 52, 0.4);
-        border: 1px solid rgba(21, 128, 61, 0.5);
+        transform: translateY(-2px);
+        background: rgba(16, 185, 129, 0.2);
+        box-shadow: 0 0 20px rgba(16, 185, 129, 0.4), inset 0 0 10px rgba(16, 185, 129, 0.2);
+        border: 1px solid rgba(16, 185, 129, 0.8);
+        color: #fff !important;
     }
     
     /* File Uploader styling */
     [data-testid="stFileUploadDropzone"] {
-        background: rgba(255, 255, 255, 0.6) !important;
-        border: 2px dashed rgba(21, 128, 61, 0.4) !important;
+        background: rgba(30, 41, 59, 0.4) !important;
+        border: 2px dashed rgba(16, 185, 129, 0.3) !important;
         border-radius: 20px !important;
-        backdrop-filter: blur(10px) !important;
+        backdrop-filter: blur(12px) !important;
         transition: all 0.3s ease !important;
         padding: 40px !important;
     }
     [data-testid="stFileUploadDropzone"]:hover {
-        background: rgba(255, 255, 255, 0.9) !important;
-        border-color: #15803d !important;
-        box-shadow: 0 0 15px rgba(21, 128, 61, 0.15) !important;
+        background: rgba(30, 41, 59, 0.8) !important;
+        border-color: #10b981 !important;
+        box-shadow: 0 0 25px rgba(16, 185, 129, 0.15) !important;
     }
 
     /* Tabs styling */
     .stTabs [data-baseweb="tab-list"] {
-        gap: 20px;
-        background: rgba(255, 255, 255, 0.6);
-        padding: 10px 20px;
+        gap: 10px;
+        background: rgba(15, 23, 42, 0.4);
+        padding: 8px;
         border-radius: 16px;
-        backdrop-filter: blur(10px);
-        margin-bottom: 20px;
-        border: 1px solid rgba(20, 83, 45, 0.05);
+        backdrop-filter: blur(12px);
+        margin-bottom: 25px;
+        border: 1px solid rgba(255, 255, 255, 0.05);
     }
     .stTabs [data-baseweb="tab"] {
         background-color: transparent !important;
-        border-radius: 8px;
-        padding: 10px 20px;
+        border-radius: 10px;
+        padding: 10px 24px;
+        transition: all 0.3s ease;
     }
     .stTabs [aria-selected="true"] {
-        background: rgba(21, 128, 61, 0.1) !important;
-        border: 1px solid rgba(21, 128, 61, 0.3) !important;
-        color: #15803d !important;
-        box-shadow: 0 0 10px rgba(21, 128, 61, 0.05);
+        background: rgba(16, 185, 129, 0.15) !important;
+        border: 1px solid rgba(16, 185, 129, 0.3) !important;
+        color: #34d399 !important;
+        box-shadow: 0 0 15px rgba(16, 185, 129, 0.1);
     }
     
     /* Dashboard Custom Metrics Card */
@@ -172,16 +176,16 @@ st.markdown("""
     
     /* Modern Glassmorphism Cards */
     .disease-card {
-        background: linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.98));
-        backdrop-filter: blur(25px);
-        -webkit-backdrop-filter: blur(25px);
-        padding: 35px;
-        border-radius: 24px;
-        border: 1px solid rgba(20, 83, 45, 0.1);
-        box-shadow: 0 15px 40px 0 rgba(0, 0, 0, 0.08);
+        background: rgba(15, 23, 42, 0.6);
+        backdrop-filter: blur(24px);
+        -webkit-backdrop-filter: blur(24px);
+        padding: 40px;
+        border-radius: 28px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
         margin: 30px 0;
-        transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        animation: fadeInUp 0.8s ease-out forwards;
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        animation: fadeInUp 0.6s ease-out forwards;
         position: relative;
         overflow: hidden;
     }
@@ -190,38 +194,48 @@ st.markdown("""
         position: absolute;
         top: 0; left: -100%;
         width: 50%; height: 100%;
-        background: linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,0.8) 50%, rgba(255,255,255,0) 100%);
+        background: linear-gradient(to right, transparent, rgba(255,255,255,0.03), transparent);
         transform: skewX(-25deg);
-        animation: shine 6s infinite;
+        animation: shine 8s infinite;
     }
     .disease-card:hover {
-        transform: translateY(-10px) scale(1.01);
-        border-color: rgba(21, 128, 61, 0.4);
-        box-shadow: 0 20px 50px 0 rgba(21, 128, 61, 0.15), inset 0 0 20px rgba(21, 128, 61, 0.05);
+        transform: translateY(-5px);
+        border-color: rgba(16, 185, 129, 0.3);
+        box-shadow: 0 30px 60px rgba(0, 0, 0, 0.6), inset 0 0 20px rgba(16, 185, 129, 0.05);
     }
     
     /* Typography */
     .healthy-text {
-        color: #15803d !important;
+        color: #34d399 !important;
         font-weight: 800;
-        font-size: 1.8rem;
+        font-size: 2rem;
         text-transform: uppercase;
-        letter-spacing: 2.5px;
-        text-shadow: 0 0 15px rgba(21, 128, 61, 0.2);
+        letter-spacing: 2px;
+        text-shadow: 0 0 20px rgba(52, 211, 153, 0.4);
     }
     .disease-text {
-        color: #b91c1c !important;
+        color: #f87171 !important;
         font-weight: 800;
-        font-size: 1.8rem;
+        font-size: 2rem;
         text-transform: uppercase;
-        letter-spacing: 2.5px;
-        text-shadow: 0 0 15px rgba(185, 28, 28, 0.2);
-        animation: pulseRed 2.5s infinite;
+        letter-spacing: 2px;
+        text-shadow: 0 0 20px rgba(248, 113, 113, 0.4);
+        animation: pulseRed 2s infinite;
+    }
+    
+    /* Streamlit specific overrides */
+    .stRadio > label {
+        color: #94a3b8;
+    }
+    div[data-baseweb="select"] > div {
+        background-color: rgba(30, 41, 59, 0.6);
+        border-color: rgba(255, 255, 255, 0.1);
+        color: white;
     }
     
     /* Keyframe Animations */
     @keyframes fadeInUp {
-        from { opacity: 0; transform: translateY(40px) scale(0.98); }
+        from { opacity: 0; transform: translateY(30px) scale(0.98); }
         to { opacity: 1; transform: translateY(0) scale(1); }
     }
     @keyframes shine {
@@ -230,9 +244,9 @@ st.markdown("""
         100% { left: 200%; }
     }
     @keyframes pulseRed {
-        0% { text-shadow: 0 0 8px rgba(185, 28, 28, 0.2); }
-        50% { text-shadow: 0 0 20px rgba(185, 28, 28, 0.4); }
-        100% { text-shadow: 0 0 8px rgba(185, 28, 28, 0.2); }
+        0% { text-shadow: 0 0 10px rgba(248, 113, 113, 0.2); }
+        50% { text-shadow: 0 0 25px rgba(248, 113, 113, 0.6); }
+        100% { text-shadow: 0 0 10px rgba(248, 113, 113, 0.2); }
     }
     </style>
 """, unsafe_allow_html=True)
