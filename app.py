@@ -131,34 +131,43 @@ st.markdown("""
     
     /* Dashboard Custom Metrics Card */
     .metric-card {
-        background: rgba(255, 255, 255, 0.85);
-        backdrop-filter: blur(16px);
-        border: 1px solid rgba(20, 83, 45, 0.1);
-        border-radius: 20px;
-        padding: 28px 24px;
+        background: rgba(30, 41, 59, 0.5);
+        backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 24px;
+        padding: 30px 24px;
         text-align: center;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.05);
-        transition: transform 0.4s ease, box-shadow 0.4s ease;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        transition: all 0.4s ease;
+        position: relative;
+        overflow: hidden;
+    }
+    .metric-card::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0; height: 2px;
+        background: linear-gradient(90deg, transparent, rgba(16, 185, 129, 0.5), transparent);
     }
     .metric-card:hover {
         transform: translateY(-8px);
-        border-color: rgba(21, 128, 61, 0.3);
-        box-shadow: 0 12px 30px rgba(21, 128, 61, 0.15);
+        border-color: rgba(16, 185, 129, 0.3);
+        box-shadow: 0 20px 40px rgba(16, 185, 129, 0.1);
     }
     .metric-title {
-        font-size: 1.15rem;
-        color: #64748b;
+        font-size: 1.1rem;
+        color: #94a3b8;
         font-weight: 500;
         margin-bottom: 12px;
-        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
     }
     .metric-value {
-        font-size: 2.8rem;
+        font-size: 3rem;
         font-weight: 800;
-        background: linear-gradient(135deg, #15803d 0%, #166534 100%);
+        background: linear-gradient(135deg, #34d399 0%, #059669 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        text-shadow: 0 2px 10px rgba(21, 128, 61, 0.1);
+        text-shadow: 0 4px 20px rgba(16, 185, 129, 0.2);
     }
     
     /* Modern Glassmorphism Cards */
