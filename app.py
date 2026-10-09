@@ -22,24 +22,19 @@ st.set_page_config(
 st.markdown("""
     <style>
     /* Global Background and Fonts */
-    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
     
     html, body, [class*="css"] {
-        font-family: 'Outfit', sans-serif;
+        font-family: 'Plus Jakarta Sans', sans-serif;
     }
     
-    /* Earthy Light Theme for Main Background */
+    /* Premium Dark Theme Background */
     .stApp {
-        background: linear-gradient(-45deg, #f0fdf4, #dcfce7, #fdf8f6, #ecfdf5);
-        background-size: 400% 400%;
-        animation: gradientBG 15s ease infinite;
-        color: #1e293b;
-    }
-
-    @keyframes gradientBG {
-        0% { background-position: 0% 50%; }
-        50% { background-position: 100% 50%; }
-        100% { background-position: 0% 50%; }
+        background-color: #050505;
+        background-image: 
+            radial-gradient(circle at 15% 50%, rgba(16, 185, 129, 0.08), transparent 25%),
+            radial-gradient(circle at 85% 30%, rgba(59, 130, 246, 0.08), transparent 25%);
+        color: #f8fafc;
     }
     
     /* Sidebar styling */
