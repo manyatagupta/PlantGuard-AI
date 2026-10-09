@@ -39,29 +39,30 @@ st.markdown("""
     
     /* Sidebar styling */
     [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, rgba(240, 253, 244, 0.8) 0%, rgba(220, 252, 231, 0.7) 100%) !important;
-        backdrop-filter: blur(25px);
-        -webkit-backdrop-filter: blur(25px);
-        border-right: 1px solid rgba(20, 83, 45, 0.1);
+        background: rgba(15, 23, 42, 0.6) !important;
+        backdrop-filter: blur(20px) !important;
+        -webkit-backdrop-filter: blur(20px) !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.05);
     }
     
     /* Header hero text */
     .hero-title {
-        font-size: 4.5rem;
+        font-size: 5rem;
         font-weight: 800;
-        background: linear-gradient(135deg, #166534 0%, #15803d 50%, #14532d 100%);
+        background: linear-gradient(to right, #34d399, #10b981, #059669);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         margin-bottom: 0px;
         padding-bottom: 0px;
         letter-spacing: -2px;
-        text-shadow: 0 4px 10px rgba(21, 128, 61, 0.1);
+        line-height: 1.1;
+        text-shadow: 0 0 40px rgba(16, 185, 129, 0.4);
     }
     .hero-subtitle {
-        font-size: 1.4rem;
-        color: #475569;
+        font-size: 1.5rem;
+        color: #94a3b8;
         font-weight: 400;
-        margin-top: 5px;
+        margin-top: 10px;
         margin-bottom: 40px;
         letter-spacing: 0.5px;
     }
