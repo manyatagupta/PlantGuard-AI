@@ -1,5 +1,6 @@
 import streamlit as st
 from PIL import Image
+import google.generativeai as genai
 import time
 import os
 import cv2
@@ -389,9 +390,11 @@ def main():
         st.title("💬 AI Plant Assistant")
         st.markdown("### Ask any questions about plant care, diseases, and gardening!")
         
+        api_key = st.sidebar.text_input("Gemini API Key", type="password", help="Get your API key from Google AI Studio")
+        
         if "messages" not in st.session_state:
             st.session_state.messages = [
-                {"role": "assistant", "content": "Hello! I am your PlantGuard AI assistant. How can I help your plants today?"}
+                {"role": "assistant", "content": "Hello! I am your PlantGuard AI assistant powered by Gemini. Please enter your API key in the sidebar and ask me anything about your plants!"}
             ]
             
         for msg in st.session_state.messages:
@@ -403,12 +406,32 @@ def main():
             with st.chat_message("user", avatar="🧑‍🌾"):
                 st.write(prompt)
                 
-            # Simulated response
             with st.chat_message("assistant", avatar="🌿"):
-                with st.spinner("Thinking..."):
-                    time.sleep(1)
-                    response = f"That's a great question about '{prompt}'. To provide the best care, ensure your plants have adequate sunlight, proper drainage, and the right nutrients. If you suspect a disease, use our 📸 Disease Scanner tab for a precise AI diagnosis!"
-                    st.write(response)
+                if not api_key:
+                    response = "Please provide your Gemini API key in the sidebar to get real responses from the AI."
+                    st.warning(response)
+                else:
+                    try:
+                        genai.configure(api_key=api_key)
+                        model = genai.GenerativeModel('gemini-1.5-flash')
+                        
+                        history = []
+                        for msg in st.session_state.messages[:-1]:
+                            if msg["role"] == "user":
+                                history.append({"role": "user", "parts": [msg["content"]]})
+                            elif msg["role"] == "assistant" and "Gemini API key" not in msg["content"]:
+                                history.append({"role": "model", "parts": [msg["content"]]})
+                                
+                        chat = model.start_chat(history=history)
+                        
+                        with st.spinner("Thinking..."):
+                            resp = chat.send_message(prompt)
+                            response = resp.text
+                            st.write(response)
+                    except Exception as e:
+                        response = f"An error occurred: {str(e)}"
+                        st.error(response)
+                        
             st.session_state.messages.append({"role": "assistant", "content": response})
         return
 
