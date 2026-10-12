@@ -129,38 +129,55 @@ def generate_pdf_report(original_img, heatmap_img, prediction_data, disease_info
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
     pdf.ln(5)
     
-    # Disease Info
-    if not prediction_data['is_healthy']:
-        pdf.set_font('Arial', 'B', 14)
-        pdf.set_text_color(15, 23, 42)
-        pdf.cell(0, 10, 'Agronomist Analysis & Action Plan', 0, 1)
-        pdf.ln(2)
+    # Helper to sanitize text for Latin-1 standard FPDF fonts
+    def clean_txt(val):
+        if isinstance(val, list):
+            val = "\n".join([f"- {item}" for item in val])
+        if not isinstance(val, str):
+            val = str(val)
+        # Strip or replace unicode characters not in latin-1
+        return val.encode('latin-1', 'replace').decode('latin-1')
         
-        # Helper to format sections
-        def add_section(title, content):
-            pdf.set_font('Arial', 'B', 11)
-            pdf.set_text_color(6, 78, 59) # Deep green
-            pdf.cell(0, 6, title, 0, 1)
-            
-            pdf.set_font('Arial', '', 11)
-            pdf.set_text_color(51, 65, 85) # Slate grey
-            # Indent text slightly
-            pdf.set_x(15)
-            pdf.multi_cell(0, 6, content)
-            pdf.ln(4)
-
-        add_section('Description:', disease_info.get("description", "N/A"))
-        add_section('Symptoms to Look For:', disease_info.get("symptoms", "N/A"))
-        add_section('Root Causes:', disease_info.get("causes", "N/A"))
-        
-        # Highlight Prevention
+    # --- PAGE 2: Prescription & Agronomist Care Guide ---
+    pdf.add_page()
+    pdf.set_font('Arial', 'B', 15)
+    pdf.set_text_color(6, 78, 59)
+    report_type = "Agronomist Prescription & Treatment Plan" if not prediction_data['is_healthy'] else "Crop Health Maintenance & Care Guide"
+    pdf.cell(0, 10, clean_txt(report_type), 0, 1)
+    pdf.ln(2)
+    
+    # Helper for formatted sections on Page 2
+    def add_presc_section(title, content, title_color=(6, 78, 59)):
+        if not content:
+            return
         pdf.set_font('Arial', 'B', 11)
-        pdf.set_text_color(220, 38, 38) # Red
-        pdf.cell(0, 6, 'Prevention & Care:', 0, 1)
-        pdf.set_font('Arial', '', 11)
+        pdf.set_text_color(*title_color)
+        pdf.cell(0, 6, clean_txt(title), 0, 1)
+        
+        pdf.set_font('Arial', '', 10)
         pdf.set_text_color(51, 65, 85)
-        pdf.set_x(15)
-        pdf.multi_cell(0, 6, disease_info.get("prevention", "N/A"))
+        pdf.set_x(14)
+        pdf.multi_cell(0, 5.5, clean_txt(content))
+        pdf.ln(3)
+
+    if not prediction_data['is_healthy']:
+        urgency = disease_info.get("urgency", "Action Recommended")
+        add_presc_section("Status & Action Urgency:", urgency, title_color=(220, 38, 38))
+        add_presc_section("Pathology Overview:", disease_info.get("description", "N/A"))
+        add_presc_section("Key Visual Symptoms:", disease_info.get("symptoms", "N/A"))
+        add_presc_section("Environmental Triggers & Causes:", disease_info.get("causes", "N/A"))
+        add_presc_section("Immediate Containment Steps (First-Aid):", disease_info.get("immediate_actions", "N/A"), title_color=(185, 28, 28))
+        add_presc_section("Organic & Bio-Control Remedies:", disease_info.get("organic_treatment", "N/A"), title_color=(5, 150, 105))
+        add_presc_section("Chemical / Conventional Treatments:", disease_info.get("chemical_treatment", "N/A"), title_color=(37, 99, 235))
+        add_presc_section("Long-Term Cultural Prevention:", disease_info.get("preventive_measures", disease_info.get("prevention", "N/A")))
+        add_presc_section("Nutrition & Soil Care:", disease_info.get("nutrition_and_care", "N/A"))
+    else:
+        add_presc_section("Status Overview:", "Plant exhibits high vigor, robust cellular structure, and no active foliar infections.", title_color=(5, 150, 105))
+        add_presc_section("Key Health Indicators:", disease_info.get("symptoms", "Healthy green foliage, crisp veins, intact cuticle barrier."))
+        add_presc_section("Routine Maintenance & Scouting:", disease_info.get("immediate_actions", "Continue bi-weekly leaf inspections."))
+        add_presc_section("Proactive Bio-Protection:", disease_info.get("organic_treatment", "Apply organic foliar feeds to maintain immune resilience."))
+        add_presc_section("Seasonal Cultural Best Practices:", disease_info.get("preventive_measures", disease_info.get("prevention", "Maintain mulch and drip irrigation.")))
+        add_presc_section("Nutrient & Irrigation Regimen:", disease_info.get("nutrition_and_care", "Maintain balanced N-P-K according to growth stage."))
         
     # Clean up temp files
     try:
