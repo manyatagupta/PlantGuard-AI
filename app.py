@@ -8,6 +8,7 @@ import numpy as np
 from predict import PlantDiseasePredictor
 from utils.db import add_prediction, get_recent_predictions, get_summary_stats, get_disease_distribution, get_daily_trends, get_all_predictions_df
 from utils.pdf_generator import generate_pdf_report
+from utils.disease_expert import get_disease_expert_info, get_all_disease_guides
 import pandas as pd
 import datetime
 
@@ -252,45 +253,9 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- Disease Information Dictionary (Template) ---
-DISEASE_INFO = {
-    "default_disease": {
-        "description": "A common fungal or bacterial infection affecting the leaves.",
-        "symptoms": "Spots, yellowing, or wilting of the leaves.",
-        "causes": "Excessive moisture, poor air circulation, or contaminated soil.",
-        "prevention": "Ensure proper spacing, avoid overhead watering, and apply suitable fungicides if necessary."
-    },
-    "Apple___Apple_scab": {
-        "description": "Apple scab is a disease of Malus trees, such as apple trees, caused by the ascomycete fungus Venturia inaequalis.",
-        "symptoms": "Dull black or grey-brown lesions on the surface of tree leaves, buds or fruits.",
-        "causes": "Fungus Venturia inaequalis, thrives in wet, cool spring weather.",
-        "prevention": "Rake up and destroy fallen leaves. Water in the morning so leaves dry quickly. Apply fungicides preventatively."
-    },
-    "Potato___Early_blight": {
-        "description": "Early blight is a common disease of potatoes and tomatoes caused by the fungus Alternaria solani.",
-        "symptoms": "Dark, concentric rings on older leaves, leading to yellowing and leaf drop.",
-        "causes": "Fungus Alternaria solani, favored by warm, humid weather and heavy dew.",
-        "prevention": "Use certified disease-free seeds. Practice crop rotation. Apply appropriate fungicides."
-    },
-    "Potato___Late_blight": {
-        "description": "Late blight is a devastating disease caused by the oomycete Phytophthora infestans.",
-        "symptoms": "Water-soaked spots on leaves that turn brown or black, often with a white mold underneath.",
-        "causes": "Oomycete Phytophthora infestans, spreading rapidly in cool, wet conditions.",
-        "prevention": "Plant resistant varieties, ensure good drainage, and apply protective fungicides before infection starts."
-    },
-    "Tomato___Target_Spot": {
-        "description": "Target spot is a fungal disease caused by Corynespora cassiicola.",
-        "symptoms": "Small, dark spots on leaves with concentric rings resembling a target.",
-        "causes": "Corynespora cassiicola fungus, thriving in high humidity and warm temperatures.",
-        "prevention": "Improve air circulation, avoid overhead watering, and use fungicide treatments if severe."
-    }
-}
-
+# --- Disease Information & Treatment Expert System ---
 def get_disease_info(class_name):
-    for key in DISEASE_INFO.keys():
-        if key.lower() in class_name.lower():
-            return DISEASE_INFO[key]
-    return DISEASE_INFO["default_disease"]
+    return get_disease_expert_info(class_name)
 
 def main():
     # Sidebar
@@ -303,7 +268,7 @@ def main():
         )
         st.markdown("---")
         
-        page = st.radio("Navigation", ["📸 Disease Scanner", "📊 Analytics Dashboard", "💬 AI Plant Assistant"])
+        page = st.radio("Navigation", ["📸 Disease Scanner", "📊 Analytics Dashboard", "📖 Care & Treatment Handbook", "💬 AI Plant Assistant"])
         st.markdown("---")
         
         # Display Prediction History from Database
@@ -433,6 +398,113 @@ def main():
                         st.error(response)
                         
             st.session_state.messages.append({"role": "assistant", "content": response})
+        return
+
+    # Care & Treatment Handbook View
+    if page == "📖 Care & Treatment Handbook":
+        st.title("📖 Plant Care & Disease Handbook")
+        st.markdown("### Comprehensive encyclopedia of crop diseases, organic remedies, and care guides.")
+        
+        all_guides = get_all_disease_guides()
+        
+        # Interactive Search & Filters
+        col_hb1, col_hb2, col_hb3 = st.columns([2, 1, 1])
+        with col_hb1:
+            search_query = st.text_input("🔍 Search by disease name, symptom, or pathogen...", "")
+        with col_hb2:
+            crop_filter = st.selectbox("🌱 Crop Filter", ["All Crops", "Apple", "Corn (Maize)", "Bell Pepper", "Potato", "Tomato"])
+        with col_hb3:
+            category_filter = st.selectbox("🔬 Category Filter", ["All Categories", "Fungal Infection", "Bacterial Infection", "Viral Disease", "Pest Infestation", "Healthy Plant"])
+            
+        st.markdown("---")
+        
+        # Filter guides
+        filtered_guides = {}
+        for k, guide in all_guides.items():
+            # Crop match
+            if crop_filter != "All Crops" and guide.get("crop", "").lower() != crop_filter.lower():
+                continue
+            # Category match
+            if category_filter != "All Categories" and category_filter.lower() not in guide.get("category", "").lower():
+                continue
+            # Search query
+            if search_query:
+                q = search_query.lower()
+                text_pool = f"{guide.get('title', '')} {guide.get('description', '')} {guide.get('symptoms', '')} {guide.get('causes', '')}".lower()
+                if q not in text_pool:
+                    continue
+            filtered_guides[k] = guide
+            
+        st.markdown(f"**Found {len(filtered_guides)} guides matching your criteria.**")
+        
+        for k, guide in filtered_guides.items():
+            is_hlthy = guide.get("severity_level") == "None"
+            icon = "🌿" if is_hlthy else "🦠"
+            expander_title = f"{icon} {guide.get('title', k)} ({guide.get('crop')} - {guide.get('category')})"
+            
+            with st.expander(expander_title, expanded=False):
+                # Header badges
+                col_b1, col_b2, col_b3 = st.columns(3)
+                with col_b1:
+                    st.markdown(f"**Host Crop:** {guide.get('crop')}")
+                with col_b2:
+                    st.markdown(f"**Classification:** `{guide.get('category')}`")
+                with col_b3:
+                    sev = guide.get('severity_level')
+                    badge_color = "#10b981" if is_hlthy else ("#ef4444" if sev in ["High", "Critical"] else "#f59e0b")
+                    st.markdown(f"**Severity Level:** <span style='color:{badge_color}; font-weight:700;'>{sev}</span>", unsafe_allow_html=True)
+                    
+                st.info(f"**Urgency:** {guide.get('urgency')}")
+                st.markdown(f"**Overview:** {guide.get('description')}")
+                
+                tab_g1, tab_g2, tab_g3, tab_g4, tab_g5 = st.tabs([
+                    "🔍 Symptoms & Causes",
+                    "⚡ Immediate Actions",
+                    "🌿 Organic Remedies",
+                    "🧪 Chemical Treatments",
+                    "🛡️ Prevention & Nutrition"
+                ])
+                
+                with tab_g1:
+                    st.markdown(f"**Visual Symptoms:**\n{guide.get('symptoms')}")
+                    st.markdown(f"**Causes & Environmental Triggers:**\n{guide.get('causes')}")
+                    
+                with tab_g2:
+                    st.markdown("##### ⚡ Urgent Containment (First-Aid):")
+                    actions = guide.get("immediate_actions", [])
+                    if isinstance(actions, list):
+                        for act in actions:
+                            st.markdown(f"- {act}")
+                    else:
+                        st.write(actions)
+                        
+                with tab_g3:
+                    st.markdown("##### 🌿 Organic & Eco-Friendly Controls:")
+                    organic = guide.get("organic_treatment", [])
+                    if isinstance(organic, list):
+                        for org in organic:
+                            st.markdown(f"- {org}")
+                    else:
+                        st.write(organic)
+                        
+                with tab_g4:
+                    st.markdown("##### 🧪 Chemical & Conventional Treatments:")
+                    chem = guide.get("chemical_treatment", [])
+                    if isinstance(chem, list):
+                        for ch in chem:
+                            st.markdown(f"- {ch}")
+                    else:
+                        st.write(chem)
+                        
+                with tab_g5:
+                    st.markdown("##### 🛡️ Cultural Prevention & Soil Nutrition:")
+                    prev = guide.get("preventive_measures", [])
+                    if isinstance(prev, list):
+                        for p in prev:
+                            st.markdown(f"- {p}")
+                    else:
+                        st.write(prev)
+                    st.markdown(f"**Nutrition & Care Regimen:**\n{guide.get('nutrition_and_care', 'N/A')}")
         return
 
     # Scanner View Content
@@ -601,23 +673,113 @@ def main():
                                 st.markdown("#### 🧠 AI Focus Area (Grad-CAM)")
                                 st.image(heatmap_img, caption="Grad-CAM Heatmap", use_column_width=True)
                             
-                            # Display Disease Information if not healthy
-                            if not is_healthy:
-                                st.markdown("### 🤖 AI Agronomist Analysis")
-                                
-                                with st.chat_message("assistant", avatar="🌿"):
-                                    st.write(f"Hello! I detected **{disease_class.replace('_', ' ')}** on your plant. Here is my analysis:")
+                            # Display Disease Information and Treatment Care Prescription
+                            st.markdown("### 🤖 AI Agronomist Prescription & Care Regimen")
+                            
+                            with st.chat_message("assistant", avatar="🌿"):
+                                if not is_healthy:
+                                    st.write(f"Hello! I detected **{disease_class.replace('_', ' ')}** on your plant. Here is your tailored agronomic prescription:")
                                     
-                                    info_tab1, info_tab2, info_tab3, info_tab4 = st.tabs(["🔬 What is it?", "⚠️ Symptoms", "🌱 Root Causes", "🛡️ Action Plan"])
+                                    # Urgency and Category Banner
+                                    col_inf1, col_inf2, col_inf3 = st.columns(3)
+                                    with col_inf1:
+                                        st.markdown(f"**Classification:** `{info.get('category', 'Pathology')}`")
+                                    with col_inf2:
+                                        st.markdown(f"**Severity Rating:** `{info.get('severity_level', 'Moderate')}`")
+                                    with col_inf3:
+                                        st.markdown(f"**Crop:** `{info.get('crop', 'Crop')}`")
+                                        
+                                    st.warning(f"**Action Urgency:** {info.get('urgency', 'Immediate attention recommended')}")
                                     
-                                    with info_tab1:
-                                        st.write(info["description"])
-                                    with info_tab2:
-                                        st.write(info["symptoms"])
-                                    with info_tab3:
-                                        st.write(info["causes"])
-                                    with info_tab4:
-                                        st.info(info["prevention"])
+                                    t1, t2, t3, t4, t5 = st.tabs([
+                                        "⚡ First-Aid & Checklist",
+                                        "🌿 Organic Remedies",
+                                        "🧪 Chemical Treatments",
+                                        "🛡️ Cultural Prevention",
+                                        "💧 Nutrition & Soil"
+                                    ])
+                                    
+                                    with t1:
+                                        st.markdown("#### ⚡ Immediate First-Aid Steps")
+                                        immed = info.get("immediate_actions", [])
+                                        if isinstance(immed, list):
+                                            for step in immed:
+                                                st.markdown(f"- {step}")
+                                        else:
+                                            st.write(immed)
+                                            
+                                        st.markdown("---")
+                                        st.markdown("##### 📋 Field Action Checklist (Track Your Progress):")
+                                        st.checkbox(f"Isolate / bottom prune affected foliage ({uploaded_file.name})", key=f"chk1_{uploaded_file.name}")
+                                        st.checkbox("Sterilize pruning shears and tools with 70% alcohol", key=f"chk2_{uploaded_file.name}")
+                                        st.checkbox("Switch to ground-level drip watering (halt overhead sprinklers)", key=f"chk3_{uploaded_file.name}")
+                                        st.checkbox("Apply prescribed organic or chemical treatment spray", key=f"chk4_{uploaded_file.name}")
+                                        
+                                    with t2:
+                                        st.markdown("#### 🌿 Organic & Eco-Friendly Controls")
+                                        org_list = info.get("organic_treatment", [])
+                                        if isinstance(org_list, list):
+                                            for item in org_list:
+                                                st.markdown(f"- {item}")
+                                        else:
+                                            st.write(org_list)
+                                            
+                                    with t3:
+                                        st.markdown("#### 🧪 Chemical Treatments & Fungicides")
+                                        chem_list = info.get("chemical_treatment", [])
+                                        if isinstance(chem_list, list):
+                                            for item in chem_list:
+                                                st.markdown(f"- {item}")
+                                        else:
+                                            st.write(chem_list)
+                                        st.caption("⚠️ Always adhere strictly to label instructions and personal protective equipment (PPE) guidelines.")
+                                        
+                                    with t4:
+                                        st.markdown("#### 🛡️ Long-term Cultural Prevention")
+                                        st.markdown(f"**Pathology Overview:** {info.get('description', '')}")
+                                        st.markdown(f"**Root Causes:** {info.get('causes', '')}")
+                                        prev_list = info.get("preventive_measures", [])
+                                        if isinstance(prev_list, list):
+                                            for p in prev_list:
+                                                st.markdown(f"- {p}")
+                                        else:
+                                            st.write(prev_list)
+                                            
+                                    with t5:
+                                        st.markdown("#### 💧 Nutrition, Watering & Soil Care")
+                                        st.write(info.get("nutrition_and_care", "Maintain balanced organic fertility."))
+                                else:
+                                    st.write(f"Great news! Your **{disease_class.replace('_', ' ')}** specimen is in excellent health! Here is your optimal care guide to keep it thriving:")
+                                    
+                                    col_h1, col_h2 = st.columns(2)
+                                    with col_h1:
+                                        st.success("🟢 Status: Optimal Health & Photosynthetic Vigor")
+                                    with col_h2:
+                                        st.info("🌿 Recommended Regimen: Routine Maintenance & Scouting")
+                                        
+                                    ht1, ht2, ht3 = st.tabs(["🌱 Growth & Maintenance", "💧 Watering & Nutrition", "🛡️ Proactive Protection"])
+                                    
+                                    with ht1:
+                                        st.markdown("#### 🌱 Optimal Growth Conditions")
+                                        st.write(info.get("description", "Vigorous foliage with intact natural defenses."))
+                                        st.markdown(f"**Key Health Indicators:** {info.get('symptoms', 'Crisp green leaf blade with healthy venation.')}")
+                                        
+                                    with ht2:
+                                        st.markdown("#### 💧 Nutrient & Hydration Regimen")
+                                        st.write(info.get("nutrition_and_care", "Ensure balanced feeding."))
+                                        
+                                    with ht3:
+                                        st.markdown("#### 🛡️ Proactive Scouting & Prevention")
+                                        prevs = info.get("preventive_measures", [])
+                                        if isinstance(prevs, list):
+                                            for pr in prevs:
+                                                st.markdown(f"- {pr}")
+                                        else:
+                                            st.write(prevs)
+                                        orgs = info.get("organic_treatment", [])
+                                        if isinstance(orgs, list):
+                                            for og in orgs:
+                                                st.markdown(f"- {og}")
                                         
                             st.markdown("---")
                             st.write("**Was this prediction helpful?**")
