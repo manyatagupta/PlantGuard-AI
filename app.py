@@ -9,6 +9,8 @@ from predict import PlantDiseasePredictor
 from utils.db import add_prediction, get_recent_predictions, get_summary_stats, get_disease_distribution, get_daily_trends, get_all_predictions_df
 from utils.pdf_generator import generate_pdf_report
 from utils.disease_expert import get_disease_expert_info, get_all_disease_guides
+from utils.weather_risk import fetch_live_weather, calculate_disease_outbreak_risk, WEATHER_PRESETS
+from utils.dosage_calculator import compute_spray_dosage, get_all_products, get_product_details, TREATMENT_DATABASE
 import pandas as pd
 import datetime
 
@@ -268,7 +270,17 @@ def main():
         )
         st.markdown("---")
         
-        page = st.radio("Navigation", ["📸 Disease Scanner", "📊 Analytics Dashboard", "📖 Care & Treatment Handbook", "💬 AI Plant Assistant"])
+        page = st.radio(
+            "Navigation", 
+            [
+                "📸 Disease Scanner", 
+                "🌦️ Disease Risk Forecaster", 
+                "⚖️ Spray & Dosage Calculator",
+                "📊 Analytics Dashboard", 
+                "📖 Care & Treatment Handbook", 
+                "💬 AI Plant Assistant"
+            ]
+        )
         st.markdown("---")
         
         # Display Prediction History from Database
@@ -505,6 +517,305 @@ def main():
                     else:
                         st.write(prev)
                     st.markdown(f"**Nutrition & Care Regimen:**\n{guide.get('nutrition_and_care', 'N/A')}")
+        return
+
+    # Disease Outbreak Risk Forecaster View
+    if page == "🌦️ Disease Risk Forecaster":
+        st.title("🌦️ Plant Disease Outbreak Risk Forecaster")
+        st.markdown("### Meteorological modeling of plant disease outbreaks based on real-time microclimate and pathogen biology.")
+        
+        # Mode tabs
+        mode_tab1, mode_tab2 = st.tabs(["📍 Live City Weather Outbreak Scan", "🎛️ Microclimate Simulator & Preset Scenarios"])
+        
+        # State management for weather params
+        if "weather_data" not in st.session_state:
+            st.session_state["weather_data"] = {
+                "temp": 20.0,
+                "humidity": 85.0,
+                "rainfall": 4.5,
+                "leaf_wetness": 7.0,
+                "wind_speed": 12.0,
+                "location_label": "Simulated Field Station"
+            }
+            
+        with mode_tab1:
+            st.markdown("#### Real-Time Meteorological Assessment")
+            col_search, col_btn = st.columns([3, 1])
+            with col_search:
+                city_input = st.text_input("Enter your farm/city location (e.g., Sacramento, London, Bengaluru, Nairobi):", value="Sacramento")
+            with col_btn:
+                st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+                fetch_btn = st.button("📡 Fetch Live Climate", use_container_width=True)
+                
+            st.markdown("##### Quick Location Presets:")
+            col_q1, col_q2, col_q3, col_q4 = st.columns(4)
+            preset_city = None
+            if col_q1.button("🇺🇸 Salinas Valley, CA", use_container_width=True):
+                preset_city = "Salinas"
+            if col_q2.button("🇮🇹 Bologna, Italy", use_container_width=True):
+                preset_city = "Bologna"
+            if col_q3.button("🇮🇳 Nashik, India", use_container_width=True):
+                preset_city = "Nashik"
+            if col_q4.button("🇪🇸 Valencia, Spain", use_container_width=True):
+                preset_city = "Valencia"
+                
+            active_city = preset_city if preset_city else (city_input if fetch_btn else None)
+            
+            if active_city:
+                with st.spinner(f"Querying meteorological satellite feeds for {active_city}..."):
+                    live_res = fetch_live_weather(active_city)
+                    if live_res.get("success"):
+                        st.session_state["weather_data"] = {
+                            "temp": live_res["temp"],
+                            "humidity": live_res["humidity"],
+                            "rainfall": live_res["rainfall"],
+                            "leaf_wetness": live_res["leaf_wetness"],
+                            "wind_speed": live_res["wind_speed"],
+                            "location_label": live_res["city"]
+                        }
+                        st.success(f"✅ Meteorological data retrieved for **{live_res['city']}** at {live_res['timestamp']}")
+                    else:
+                        st.error(f"❌ {live_res.get('error')}")
+
+        with mode_tab2:
+            st.markdown("#### Simulate Environmental Conditions & Test Pathogen Triggers")
+            selected_preset = st.selectbox("Choose a Climate Scenario Preset:", ["Custom"] + list(WEATHER_PRESETS.keys()))
+            if selected_preset != "Custom":
+                preset_info = WEATHER_PRESETS[selected_preset]
+                st.info(f"ℹ️ **Scenario Profile:** {preset_info['description']}")
+                st.session_state["weather_data"] = {
+                    "temp": preset_info["temp"],
+                    "humidity": preset_info["humidity"],
+                    "rainfall": preset_info["rainfall"],
+                    "leaf_wetness": preset_info["leaf_wetness"],
+                    "wind_speed": preset_info["wind_speed"],
+                    "location_label": selected_preset.split(" (")[0]
+                }
+            
+            col_s1, col_s2, col_s3 = st.columns(3)
+            with col_s1:
+                st.session_state["weather_data"]["temp"] = st.slider("Temperature (°C)", -5.0, 45.0, float(st.session_state["weather_data"]["temp"]), 0.5)
+                st.session_state["weather_data"]["humidity"] = st.slider("Relative Humidity (%)", 10.0, 100.0, float(st.session_state["weather_data"]["humidity"]), 1.0)
+            with col_s2:
+                st.session_state["weather_data"]["rainfall"] = st.slider("Precipitation / 24h Rain (mm)", 0.0, 50.0, float(st.session_state["weather_data"]["rainfall"]), 0.5)
+                st.session_state["weather_data"]["leaf_wetness"] = st.slider("Continuous Leaf Wetness (Hours)", 0.0, 24.0, float(st.session_state["weather_data"]["leaf_wetness"]), 0.5)
+            with col_s3:
+                st.session_state["weather_data"]["wind_speed"] = st.slider("Wind Speed (km/h)", 0.0, 50.0, float(st.session_state["weather_data"]["wind_speed"]), 1.0)
+                st.caption("Leaf wetness duration is the primary driver of fungal spore germination (e.g. Mills Apple Scab periods).")
+
+        st.markdown("---")
+        
+        # Display Current Meteorological Bar
+        w = st.session_state["weather_data"]
+        st.markdown(f"### 📡 Microclimate Status: **{w.get('location_label', 'Field')}**")
+        
+        col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
+        with col_m1:
+            st.metric("🌡️ Temperature", f"{w['temp']} °C", f"{round(w['temp'] * 9/5 + 32, 1)} °F")
+        with col_m2:
+            st.metric("💧 Humidity", f"{w['humidity']} %")
+        with col_m3:
+            st.metric("🌧️ Rainfall (24h)", f"{w['rainfall']} mm")
+        with col_m4:
+            st.metric("🍃 Leaf Wetness", f"{w['leaf_wetness']} hrs")
+        with col_m5:
+            st.metric("💨 Wind Speed", f"{w['wind_speed']} km/h")
+            
+        # Target Crop Filter
+        st.markdown("---")
+        col_cf, _ = st.columns([2, 2])
+        with col_cf:
+            crop_choice = st.selectbox("🌱 Focus on Host Crop:", ["All Crops", "Apple", "Corn (Maize)", "Bell Pepper", "Potato", "Tomato"])
+
+        # Calculate Outbreak Risk
+        analysis = calculate_disease_outbreak_risk(
+            temp=w["temp"],
+            humidity=w["humidity"],
+            rainfall=w["rainfall"],
+            leaf_wetness=w["leaf_wetness"],
+            wind_speed=w["wind_speed"],
+            crop_filter=crop_choice
+        )
+        
+        # Overall Biosecurity Card
+        score = analysis["overall_score"]
+        gauge_color = analysis["overall_color"]
+        
+        st.markdown(f"""
+        <div class='disease-card' style='border-color: {gauge_color}; margin: 20px 0;'>
+            <div style='display: flex; justify-content: space-between; align-items: center;'>
+                <div>
+                    <h2 style='margin:0; color: #f8fafc;'>Farm Biosecurity Outbreak Index</h2>
+                    <p style='color: #94a3b8; margin: 4px 0 0 0;'>Epidemiological probability based on current temperature, leaf wetness, and humidity.</p>
+                </div>
+                <div style='text-align: right;'>
+                    <span style='font-size: 2.5rem; font-weight: 800; color: {gauge_color};'>{analysis["overall_icon"]} {score}%</span>
+                    <div style='font-weight: 700; color: {gauge_color}; text-transform: uppercase; letter-spacing: 1px;'>{analysis["overall_level"]}</div>
+                </div>
+            </div>
+            <div style='width: 100%; background-color: #334155; border-radius: 999px; height: 12px; margin: 20px 0 10px 0; box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);'>
+                <div style='background-color: {gauge_color}; width: {min(100.0, max(4.0, score))}%; height: 12px; border-radius: 999px; box-shadow: 0 0 15px {gauge_color};'></div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if analysis["top_threat"]:
+            top_t = analysis["top_threat"]
+            st.error(f"🚨 **Primary High-Risk Pathogen Threat:** **{top_t['name']}** on {', '.join(top_t['crops'])} ({top_t['score']}% Outbreak Probability)")
+            
+        st.markdown("#### 🔬 Pathogen Risk Breakdown")
+        
+        for d in analysis["diseases"]:
+            with st.expander(f"{d['icon']} **{d['name']}** — Outbreak Threat: {d['score']}% ({d['level']})", expanded=(d['score'] >= 50.0)):
+                col_d1, col_d2 = st.columns([1, 1])
+                with col_d1:
+                    st.markdown(f"**Vulnerable Crops:** `{'`, `'.join(d['crops'])}`")
+                    st.markdown(f"**Pathogen Classification:** `{d['pathogen_type']}`")
+                    st.markdown(f"**Optimal Trigger Climate:** {d['optimum']}")
+                with col_d2:
+                    st.markdown(f"**Threat Severity:** <span style='color:{d['badge_color']}; font-weight:700;'>{d['level']}</span>", unsafe_allow_html=True)
+                    st.warning(f"**Emergency Alert:** {d['emergency']}")
+                    
+                st.markdown(f"**🛡️ Pre-emptive Countermeasure:**\n{d['advice']}")
+                
+        return
+
+    # Spray & Dosage Calculator View
+    if page == "⚖️ Spray & Dosage Calculator":
+        st.title("⚖️ Precision Spray & Fertilizer Dosage Calculator")
+        st.markdown("### Compute exact carrier water volume, chemical/organic concentrate, and tank mixing recipes tailored to your farm.")
+        
+        all_prods = get_all_products()
+        
+        col_left, col_right = st.columns([1.1, 1.3], gap="large")
+        
+        with col_left:
+            st.markdown("#### 1️⃣ Plot & Plant Scale")
+            area_unit = st.selectbox(
+                "📐 Select Scaling Method:",
+                ["Garden Bed (Sq. Feet)", "Plant Count (Individual Plants)", "Greenhouse (Sq. Meters)", "Farm Acreage (Acres)"]
+            )
+            
+            # Default scale values
+            if area_unit == "Garden Bed (Sq. Feet)":
+                area_val = st.number_input("Enter Total Canopy Area (Sq. Ft):", min_value=10.0, max_value=50000.0, value=250.0, step=25.0)
+            elif area_unit == "Plant Count (Individual Plants)":
+                area_val = st.number_input("Enter Number of Crop Plants:", min_value=1.0, max_value=5000.0, value=25.0, step=5.0)
+            elif area_unit == "Greenhouse (Sq. Meters)":
+                area_val = st.number_input("Enter Greenhouse Floor Area (m²):", min_value=5.0, max_value=10000.0, value=100.0, step=10.0)
+            else:
+                area_val = st.number_input("Enter Total Farm Acreage (Acres):", min_value=0.1, max_value=500.0, value=1.0, step=0.25)
+                
+            canopy_stage = st.selectbox(
+                "🌿 Canopy Density & Growth Stage:",
+                ["Medium Canopy", "Early Seedlings / Low Canopy", "Dense Fruiting Canopy / Orchard Trees"]
+            )
+            
+            st.markdown("---")
+            st.markdown("#### 2️⃣ Treatment Formulation")
+            
+            type_filter = st.radio(
+                "Category:",
+                ["All Formulations", "Organic Botanicals & Bio-Pesticides", "Conventional / Chemical Protectants", "Foliar Fertilizers & Tonics"],
+                horizontal=True
+            )
+            
+            filtered_prods = []
+            for p_name in all_prods:
+                details = get_product_details(p_name)
+                cat = details.get("type", "")
+                if type_filter == "Organic Botanicals & Bio-Pesticides" and "Organic" not in cat and "Biological" not in cat:
+                    continue
+                if type_filter == "Conventional / Chemical Protectants" and "Chemical" not in cat:
+                    continue
+                if type_filter == "Foliar Fertilizers & Tonics" and "Fertilizer" not in cat and "Mineral" not in cat and "Micronutrient" not in cat:
+                    continue
+                filtered_prods.append(p_name)
+                
+            selected_product = st.selectbox("🧪 Select Product Formulation:", filtered_prods)
+            prod_meta = get_product_details(selected_product)
+            
+            st.info(f"**Target Pathogens & Pests:** {', '.join(prod_meta.get('recommended_for', []))}\n\n**Approved Crops:** {', '.join(prod_meta.get('crops', []))}")
+            
+        with col_right:
+            st.markdown("#### 3️⃣ Tailored Spray Prescription")
+            
+            dosage_res = compute_spray_dosage(
+                product_name=selected_product,
+                area_type=area_unit,
+                area_val=float(area_val),
+                plant_stage=canopy_stage
+            )
+            
+            # Display Quick Metrics
+            col_qm1, col_qm2 = st.columns(2)
+            with col_qm1:
+                st.markdown(f"""
+                <div class='metric-card' style='padding: 20px 15px;'>
+                    <div class='metric-title'>Total Water Carrier</div>
+                    <div class='metric-value' style='font-size: 2.2rem;'>{dosage_res['water_liters']} L</div>
+                    <div style='color: #94a3b8; font-size: 0.9rem; margin-top: 5px;'>approx. <strong>{dosage_res['water_gallons']} US Gallons</strong></div>
+                </div>
+                """, unsafe_allow_html=True)
+            with col_qm2:
+                st.markdown(f"""
+                <div class='metric-card' style='padding: 20px 15px;'>
+                    <div class='metric-title'>Concentrate Amount</div>
+                    <div class='metric-value' style='font-size: 2.2rem;'>{dosage_res['active_amount']} {dosage_res['active_unit']}</div>
+                    <div style='color: #10b981; font-size: 0.95rem; margin-top: 5px; font-weight:600;'>{dosage_res['household_measure']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            # Tank Mix Steps
+            with st.container():
+                st.markdown("##### 🧪 WALES Tank Mixing Protocol:")
+                for step in dosage_res["mixing_steps"]:
+                    st.markdown(step)
+                    
+            st.markdown("---")
+            
+            # Safety & Field Application Guidance
+            col_s1, col_s2 = st.columns(2)
+            with col_s1:
+                st.markdown(f"**⏰ Best Application Window:**\n{dosage_res['best_time']}")
+                st.markdown(f"**🦺 Required PPE:**\n{dosage_res['ppe']}")
+            with col_s2:
+                st.markdown(f"**⏳ Pre-Harvest Interval (PHI):** `{dosage_res['phi_days']} Days`")
+                st.markdown(f"**🚫 Re-Entry Interval (REI):** `{dosage_res['rei_hours']} Hours`")
+                
+            # Printable Prescription Text Download
+            recipe_text = f"""PLANTGUARD AI - SPRAY & FERTILIZER PRESCRIPTION SHEET
+=============================================================
+Date: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M")}
+Target Crop Scale: {area_val} ({area_unit})
+Canopy Stage: {canopy_stage}
+
+PRODUCT PRESCRIPTION:
+- Product Formulation: {dosage_res['product_name']} ({dosage_res['category']})
+- Carrier Water Volume: {dosage_res['water_liters']} Liters ({dosage_res['water_gallons']} US Gallons)
+- Active Product Needed: {dosage_res['active_amount']} {dosage_res['active_unit']} ({dosage_res['household_measure']})
+
+STEP-BY-STEP TANK MIX PROTOCOL:
+{chr(10).join(dosage_res['mixing_steps'])}
+
+SAFETY & COMPLIANCE:
+- Pre-Harvest Interval (PHI): {dosage_res['phi_days']} Days
+- Field Re-Entry Interval (REI): {dosage_res['rei_hours']} Hours
+- Required PPE: {dosage_res['ppe']}
+- Recommended Window: {dosage_res['best_time']}
+=============================================================
+Generated by PlantGuard AI
+"""
+            st.download_button(
+                label="📄 Download Printable Spray Recipe (.txt)",
+                data=recipe_text,
+                file_name=f"PlantGuard_Spray_Recipe_{selected_product.split()[0]}.txt",
+                mime="text/plain",
+                use_container_width=True
+            )
+            
         return
 
     # Scanner View Content
@@ -748,6 +1059,13 @@ def main():
                                     with t5:
                                         st.markdown("#### 💧 Nutrition, Watering & Soil Care")
                                         st.write(info.get("nutrition_and_care", "Maintain balanced organic fertility."))
+                                        
+                                    st.markdown("<br>", unsafe_allow_html=True)
+                                    col_act1, col_act2 = st.columns(2)
+                                    with col_act1:
+                                        st.info("⚖️ **Prepare Spray Tank:** Head to **⚖️ Spray & Dosage Calculator** in the navigation menu to compute exact dilution and water volume for this crop!")
+                                    with col_act2:
+                                        st.warning("🌦️ **Check Climate Risk:** Visit **🌦️ Disease Risk Forecaster** to see if current microclimate speeds up this pathogen!")
                                 else:
                                     st.write(f"Great news! Your **{disease_class.replace('_', ' ')}** specimen is in excellent health! Here is your optimal care guide to keep it thriving:")
                                     
