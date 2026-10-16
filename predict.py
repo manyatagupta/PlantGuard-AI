@@ -11,6 +11,9 @@ class PlantDiseasePredictor:
         self.class_names_path = class_names_path
         self.model = None
         self.class_names = []
+        self.has_gradcam = False
+        self.feature_extractor = None
+        self.classifier_model = None
         
     def load_model(self):
         """Loads the trained model and class names if they exist."""
@@ -25,7 +28,45 @@ class PlantDiseasePredictor:
         with open(self.class_names_path, 'r') as f:
             self.class_names = [line.strip() for line in f.readlines()]
             
+        self._setup_gradcam()
         return True
+
+    def _setup_gradcam(self):
+        """Preconfigures sub-models for Grad-CAM explainability."""
+        try:
+            base_model = None
+            for layer in self.model.layers:
+                if isinstance(layer, tf.keras.Model) and "sequential" not in layer.name.lower():
+                    base_model = layer
+                    break
+
+            if base_model is not None:
+                last_conv = None
+                try:
+                    last_conv = base_model.get_layer("top_conv")
+                except Exception:
+                    for l in reversed(base_model.layers):
+                        if "conv" in l.name.lower() or "conv" in type(l).__name__.lower():
+                            last_conv = l
+                            break
+
+                if last_conv is not None:
+                    self.feature_extractor = tf.keras.Model(
+                        inputs=base_model.input,
+                        outputs=[last_conv.output, base_model.output]
+                    )
+
+                    classifier_input = tf.keras.Input(shape=base_model.output.shape[1:])
+                    x = classifier_input
+                    base_idx = self.model.layers.index(base_model)
+                    for layer in self.model.layers[base_idx + 1:]:
+                        x = layer(x)
+                    self.classifier_model = tf.keras.Model(inputs=classifier_input, outputs=x)
+                    self.has_gradcam = True
+                    return
+        except Exception as e:
+            print(f"Grad-CAM setup note: {e}")
+        self.has_gradcam = False
         
     def predict(self, image):
         """
@@ -65,50 +106,24 @@ class PlantDiseasePredictor:
         
     def make_gradcam_heatmap(self, img_array, pred_index=None):
         """Generates a Grad-CAM heatmap for the given image and class."""
+        if not getattr(self, 'has_gradcam', False):
+            return None
         try:
-            # Find the last convolutional layer or the nested base model
-            target_layer = None
-            for layer in reversed(self.model.layers):
-                # Check for a nested base model (e.g., EfficientNet, MobileNet)
-                if isinstance(layer, tf.keras.Model):
-                    target_layer = layer
-                    break
-                # Alternatively, check for a standalone convolutional layer
-                if isinstance(layer, tf.keras.layers.Conv2D):
-                    target_layer = layer
-                    break
-            
-            if target_layer is None:
-                return None
-                
-            # Create a model that maps the input image to the activations
-            # of the target layer as well as the output predictions
-            grad_model = Model(
-                [self.model.inputs], 
-                [target_layer.output, self.model.output]
-            )
-
-            # Compute the gradient of the top predicted class for our input image
-            # with respect to the activations of the last conv layer
+            img_tensor = tf.cast(img_array, tf.float32)
             with tf.GradientTape() as tape:
-                last_conv_layer_output, preds = grad_model(img_array)
+                conv_out, base_out = self.feature_extractor(img_tensor)
+                tape.watch(conv_out)
+                preds = self.classifier_model(base_out)
                 if pred_index is None:
                     pred_index = tf.argmax(preds[0])
                 class_channel = preds[:, pred_index]
 
-            # Gradient of the output neuron w.r.t. the output feature map
-            grads = tape.gradient(class_channel, last_conv_layer_output)
-
-            # Mean intensity of the gradient over a specific feature map channel
+            grads = tape.gradient(class_channel, conv_out)
             pooled_grads = tf.reduce_mean(grads, axis=(0, 1, 2))
-
-            # Multiply each channel in the feature map array by "how important this channel is"
-            last_conv_layer_output = last_conv_layer_output[0]
-            heatmap = last_conv_layer_output @ pooled_grads[..., tf.newaxis]
+            conv_0 = conv_out[0]
+            heatmap = conv_0 @ pooled_grads[..., tf.newaxis]
             heatmap = tf.squeeze(heatmap)
-
-            # Normalize the heatmap between 0 and 1
-            heatmap = tf.maximum(heatmap, 0) / tf.math.reduce_max(heatmap)
+            heatmap = tf.maximum(heatmap, 0.0) / (tf.math.reduce_max(heatmap) + 1e-10)
             return heatmap.numpy()
         except Exception as e:
             print(f"Failed to generate Grad-CAM: {e}")
