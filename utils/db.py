@@ -14,27 +14,50 @@ def init_db():
             filename TEXT,
             predicted_class TEXT,
             confidence REAL,
-            is_healthy INTEGER
+            is_healthy INTEGER,
+            damage_pct REAL DEFAULT 0.0,
+            severity_grade TEXT DEFAULT 'N/A'
         )
     ''')
+    # Migrate if columns don't exist yet
+    c.execute("PRAGMA table_info(predictions)")
+    columns = [row[1] for row in c.fetchall()]
+    if "damage_pct" not in columns:
+        try:
+            c.execute("ALTER TABLE predictions ADD COLUMN damage_pct REAL DEFAULT 0.0")
+        except Exception:
+            pass
+    if "severity_grade" not in columns:
+        try:
+            c.execute("ALTER TABLE predictions ADD COLUMN severity_grade TEXT DEFAULT 'N/A'")
+        except Exception:
+            pass
     conn.commit()
     conn.close()
 
-def add_prediction(filename, predicted_class, confidence, is_healthy):
+def add_prediction(filename, predicted_class, confidence, is_healthy, damage_pct=0.0, severity_grade="N/A"):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     c.execute(
-        "INSERT INTO predictions (timestamp, filename, predicted_class, confidence, is_healthy) VALUES (?, ?, ?, ?, ?)",
-        (timestamp, filename, predicted_class, confidence, int(is_healthy))
+        "INSERT INTO predictions (timestamp, filename, predicted_class, confidence, is_healthy, damage_pct, severity_grade) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (timestamp, filename, predicted_class, confidence, int(is_healthy), float(damage_pct), str(severity_grade))
     )
+    conn.commit()
+    conn.close()
+
+def clear_prediction_history():
+    """Clears all records in the predictions table."""
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("DELETE FROM predictions")
     conn.commit()
     conn.close()
 
 def get_recent_predictions(limit=5):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute("SELECT timestamp, filename, predicted_class, confidence, is_healthy FROM predictions ORDER BY id DESC LIMIT ?", (limit,))
+    c.execute("SELECT timestamp, filename, predicted_class, confidence, is_healthy, damage_pct, severity_grade FROM predictions ORDER BY id DESC LIMIT ?", (limit,))
     rows = c.fetchall()
     conn.close()
     
@@ -44,7 +67,9 @@ def get_recent_predictions(limit=5):
             "filename": row[1],
             "class": row[2],
             "conf": row[3],
-            "is_healthy": bool(row[4])
+            "is_healthy": bool(row[4]),
+            "damage_pct": row[5] if len(row) > 5 and row[5] is not None else 0.0,
+            "severity_grade": row[6] if len(row) > 6 and row[6] is not None else "N/A"
         }
         for row in rows
     ]
