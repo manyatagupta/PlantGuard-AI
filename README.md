@@ -13,13 +13,16 @@ PlantGuard AI is an intelligent, full-stack web application designed to help far
 **⚠️ Disclaimer:** This system is built for educational and assistive purposes and should not replace professional agricultural advice.
 
 ## ✨ Key Features
-- **Explainable AI (Grad-CAM)**: The model doesn't just predict; it generates a heatmap showing exactly which part of the leaf it considers diseased!
-- **📊 Analytics Dashboard**: A built-in dashboard to monitor crop health trends, view disease distribution charts, and export historical scanning data to CSV.
-- **Premium UI/UX**: A sleek, responsive "Dark-Nature" theme with glassmorphism effects and micro-animations for an ultra-modern feel.
-- **🤖 AI Agronomist**: A simulated chat interface that breaks down the disease description, symptoms, and prevention strategies in a conversational format.
-- **📄 Professional PDF Reports**: Generate and download beautifully styled PDF diagnostic reports featuring the original image, Grad-CAM heatmap, and confidence distribution charts.
-- **Batch Image Upload**: Upload multiple `.jpg`, `.jpeg`, or `.png` images of plant leaves simultaneously.
-- **Persistent Prediction History**: A local SQLite database tracks all your past predictions securely so you never lose them across sessions.
+- **🔬 Quantitative Computer Vision Leaf Damage Segmentation**: Measures exact percentage of damaged/necrotic foliar surface area (% Damaged Area) using advanced color space segmentation and assigns phytopathological severity grades (Grade 0 to Grade 4).
+- **🧠 Explainable AI (Grad-CAM Heatmaps)**: Deep-learning feature activation localization using Keras 3 EfficientNetV2B0 top convolutional activations to show growers the exact leaf regions driving classification.
+- **🔊 Hands-Free Audio Diagnostic Briefing**: Integrated browser speech synthesis allowing field growers and farmers wearing work gloves to listen to diagnostic summaries hands-free.
+- **📅 Seasonal Disease & Spray Calendar**: Stage-by-stage phenological protection timelines (from dormant to harvest) for Apple, Tomato, Potato, Corn, and Bell Pepper.
+- **🌦️ Meteorological Disease Outbreak Forecaster**: Live Open-Meteo satellite weather queries and epidemiological pathogen vulnerability scoring based on temperature, continuous leaf wetness, and humidity.
+- **⚖️ Precision Spray & Dosage Calculator**: Exact active concentrate amount, carrier water volume, WALES tank mixing protocols, PHI withholding periods, and REI safety intervals.
+- **💬 Dual-Mode AI Agronomist**: Works completely offline out-of-the-box with the embedded localized Agronomy Brain, or seamlessly connects with Google Gemini AI Studio for conversational dialogues.
+- **📄 Enhanced 3-Panel PDF Diagnostic Reports**: Beautifully styled multi-page export featuring the original specimen, Grad-CAM attention map, and CV lesion segmentation overlay alongside tailored prescription regimens.
+- **📊 Analytics Dashboard**: Monitor historical crop health trends, average foliar lesion surface area, and export data to CSV.
+- **Persistent Prediction History**: A local SQLite database tracks all your past predictions securely with one-click database management.
 
 ## 📸 Demo Screenshots
 *(Add your screenshots here once you run the application)*

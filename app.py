@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 from PIL import Image
 import google.generativeai as genai
 import time
@@ -6,11 +7,18 @@ import os
 import cv2
 import numpy as np
 from predict import PlantDiseasePredictor
-from utils.db import add_prediction, get_recent_predictions, get_summary_stats, get_disease_distribution, get_daily_trends, get_all_predictions_df
+from utils.db import (
+    add_prediction, get_recent_predictions, get_summary_stats, 
+    get_disease_distribution, get_daily_trends, get_all_predictions_df,
+    clear_prediction_history
+)
 from utils.pdf_generator import generate_pdf_report
 from utils.disease_expert import get_disease_expert_info, get_all_disease_guides
 from utils.weather_risk import fetch_live_weather, calculate_disease_outbreak_risk, WEATHER_PRESETS
 from utils.dosage_calculator import compute_spray_dosage, get_all_products, get_product_details, TREATMENT_DATABASE
+from utils.leaf_cv import analyze_leaf_damage
+from utils.agronomy_brain import query_agronomy_brain, SUGGESTED_QUESTIONS
+from utils.crop_calendar import get_crop_calendar, PHENOLOGY_CALENDAR
 import pandas as pd
 import datetime
 
@@ -276,6 +284,7 @@ def main():
                 "📸 Disease Scanner", 
                 "🌦️ Disease Risk Forecaster", 
                 "⚖️ Spray & Dosage Calculator",
+                "📅 Seasonal Spray Calendar",
                 "📊 Analytics Dashboard", 
                 "📖 Care & Treatment Handbook", 
                 "💬 AI Plant Assistant"
@@ -292,41 +301,84 @@ def main():
             for item in history:
                 status_icon = "✅" if item['is_healthy'] else "🦠"
                 st.write(f"{status_icon} **{item['class']}** ({item['conf']*100:.1f}%)")
-                st.caption(f"📅 {item['timestamp']} - {item['filename']}")
+                dmg_text = f" • {item['damage_pct']:.1f}% damage" if item.get('damage_pct', 0.0) > 0 else ""
+                st.caption(f"📅 {item['timestamp']}{dmg_text}")
         
         st.markdown("---")
         st.warning("⚠️ **Disclaimer:** This is an educational tool and should not replace professional agricultural advice.")
 
+    # Seasonal Spray Calendar View
+    if page == "📅 Seasonal Spray Calendar":
+        st.title("📅 Seasonal Crop Protection & Spray Calendar")
+        st.markdown("### Phenological stage-by-stage guide to disease prevention, scouting, and proactive spray timing.")
+        
+        col_c1, col_c2 = st.columns([1.5, 2.5])
+        with col_c1:
+            selected_crop = st.selectbox("🌱 Choose Crop Phenology:", list(PHENOLOGY_CALENDAR.keys()))
+        with col_c2:
+            st.info(f"Showing seasonal growth timeline and protection milestones for **{selected_crop}**.")
+            
+        stages = get_crop_calendar(selected_crop)
+        
+        for idx, s in enumerate(stages, 1):
+            with st.container():
+                st.markdown(f"""
+                <div class='disease-card' style='padding: 24px; margin: 15px 0;'>
+                    <div style='display: flex; justify-content: space-between; align-items: center;'>
+                        <h3 style='margin:0; color: #34d399;'>{s['stage']}</h3>
+                        <span style='background: rgba(16, 185, 129, 0.2); color: #34d399; padding: 4px 12px; border-radius: 999px; font-size: 0.85rem; font-weight: 600;'>{s['timing']}</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                col_st1, col_st2 = st.columns([1, 1])
+                with col_st1:
+                    st.markdown("##### 🚨 High-Risk Pathogens:")
+                    for threat in s["threats"]:
+                        st.markdown(f"- 🦠 **{threat}**")
+                    st.markdown("##### 🧪 Recommended Preventative Spray:")
+                    st.success(f"{s['preventive_spray']}")
+                with col_st2:
+                    st.markdown("##### 📋 Actionable Field & Cultural Practices:")
+                    st.write(s["action"])
+                    st.caption("💡 Sprays applied at this stage stop exponential spore amplification before canopy damage occurs.")
+                st.markdown("---")
+        return
+
     # Analytics Dashboard View
     if page == "📊 Analytics Dashboard":
         st.title("📊 Analytics Dashboard")
-        st.markdown("### Monitor crop health trends and historical data.")
+        st.markdown("### Monitor crop health trends, severity metrics, and historical scan data.")
         
-        # Interactive filters for UI enhancement
         col_f1, col_f2 = st.columns(2)
         with col_f1:
             date_range = st.selectbox("📅 Select Time Range", ["Last 7 Days", "Last 30 Days", "All Time"], index=2)
         with col_f2:
-            crop_filter = st.selectbox("🌱 Filter by Crop", ["All Crops", "Apple", "Potato", "Tomato", "Grape", "Corn"])
+            crop_filter = st.selectbox("🌱 Filter by Crop", ["All Crops", "Apple", "Potato", "Tomato", "Grape", "Corn", "Bell Pepper"])
             
         st.markdown(f"**Showing data for:** {date_range} | {crop_filter}")
         st.markdown("---")
         
         stats = get_summary_stats()
+        df_all = get_all_predictions_df()
+        avg_damage = 0.0
+        if not df_all.empty and "damage_pct" in df_all.columns:
+            avg_damage = df_all["damage_pct"].mean()
         
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.markdown(f'<div class="metric-card"><div class="metric-title">Total Scans</div><div class="metric-value">{stats["total"]}</div></div>', unsafe_allow_html=True)
         with col2:
             st.markdown(f'<div class="metric-card"><div class="metric-title">Diseased Plants</div><div class="metric-value" style="color:#ef4444">{stats["diseased"]}</div></div>', unsafe_allow_html=True)
         with col3:
             health_ratio = (stats["healthy"] / stats["total"] * 100) if stats["total"] > 0 else 0
-            st.markdown(f'<div class="metric-card"><div class="metric-title">Overall Health Ratio</div><div class="metric-value">{health_ratio:.1f}%</div></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="metric-card"><div class="metric-title">Health Ratio</div><div class="metric-value">{health_ratio:.1f}%</div></div>', unsafe_allow_html=True)
+        with col4:
+            st.markdown(f'<div class="metric-card"><div class="metric-title">Avg Foliar Damage</div><div class="metric-value" style="color:#f59e0b">{avg_damage:.1f}%</div></div>', unsafe_allow_html=True)
         
         st.markdown("---")
         
         col_chart1, col_chart2 = st.columns(2)
-        
         with col_chart1:
             st.markdown("#### 🦠 Disease Distribution")
             dist = get_disease_distribution()
@@ -346,68 +398,98 @@ def main():
                 st.info("No trend data available yet.")
                 
         st.markdown("---")
-        st.markdown("#### 🗄️ Raw Data Export")
-        df_all = get_all_predictions_df()
+        st.markdown("#### 🗄️ Raw Data Export & History Management")
         
         st.dataframe(df_all, use_container_width=True)
         
-        if not df_all.empty:
-            csv = df_all.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="📥 Download Data as CSV",
-                data=csv,
-                file_name=f'plantguard_history_{datetime.datetime.now().strftime("%Y%m%d")}.csv',
-                mime='text/csv',
-            )
+        col_dl, col_clr = st.columns([2, 1])
+        with col_dl:
+            if not df_all.empty:
+                csv = df_all.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="📥 Download Historical Data as CSV",
+                    data=csv,
+                    file_name=f'plantguard_history_{datetime.datetime.now().strftime("%Y%m%d")}.csv',
+                    mime='text/csv',
+                    use_container_width=True
+                )
+        with col_clr:
+            with st.expander("🗑️ Reset Database History"):
+                st.warning("This will erase all past scans from the local database.")
+                if st.button("Confirm Reset History", type="secondary", use_container_width=True):
+                    clear_prediction_history()
+                    st.toast("Scan history cleared successfully!")
+                    st.rerun()
         
-        return # Stop execution of the scanner
+        return # Stop execution of scanner
 
     # AI Assistant View
     if page == "💬 AI Plant Assistant":
-        st.title("💬 AI Plant Assistant")
-        st.markdown("### Ask any questions about plant care, diseases, and gardening!")
+        st.title("💬 AI Plant Assistant & Agronomist")
+        st.markdown("### Expert plant pathology, organic remedies, soil fertility, and chemical compatibility intelligence.")
         
-        api_key = st.sidebar.text_input("Gemini API Key", type="password", help="Get your API key from Google AI Studio")
-        
+        with st.sidebar:
+            st.markdown("### ⚙️ Agronomist Engine")
+            api_key = st.text_input("Gemini API Key (Optional)", type="password", help="Enter your Gemini API key from Google AI Studio for open-ended conversation. Leave blank to use the built-in offline Agronomy Brain!")
+            if api_key:
+                st.success("🟢 Mode: Gemini Generative AI Active")
+            else:
+                st.info("🧠 Mode: Built-in PlantGuard Agronomy Brain Active (No API key needed!)")
+                
+        # Suggestion chips
+        st.markdown("##### 💡 Quick Inquiries:")
+        cols_q = st.columns(3)
+        selected_prompt = None
+        for i, q_text in enumerate(SUGGESTED_QUESTIONS[:3]):
+            if cols_q[i].button(q_text, use_container_width=True):
+                selected_prompt = q_text
+                
         if "messages" not in st.session_state:
             st.session_state.messages = [
-                {"role": "assistant", "content": "Hello! I am your PlantGuard AI assistant powered by Gemini. Please enter your API key in the sidebar and ask me anything about your plants!"}
+                {"role": "assistant", "content": "Hello! I am your PlantGuard AI Agronomist. Ask me anything about plant diseases, organic remedies, spray dilution, or soil nutrition. I work offline out-of-the-box or with your Gemini API key!"}
             ]
             
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"], avatar="🌿" if msg["role"] == "assistant" else "🧑‍🌾"):
-                st.write(msg["content"])
+                st.markdown(msg["content"])
                 
-        if prompt := st.chat_input("Ask about fertilizers, watering, specific diseases..."):
-            st.session_state.messages.append({"role": "user", "content": prompt})
+        prompt = st.chat_input("Ask about fertilizers, watering, specific diseases...")
+        active_input = selected_prompt or prompt
+        
+        if active_input:
+            st.session_state.messages.append({"role": "user", "content": active_input})
             with st.chat_message("user", avatar="🧑‍🌾"):
-                st.write(prompt)
+                st.write(active_input)
                 
             with st.chat_message("assistant", avatar="🌿"):
-                if not api_key:
-                    response = "Please provide your Gemini API key in the sidebar to get real responses from the AI."
-                    st.warning(response)
-                else:
+                if api_key:
                     try:
                         genai.configure(api_key=api_key)
-                        model = genai.GenerativeModel('gemini-1.5-flash')
-                        
+                        model = genai.GenerativeModel(
+                            'gemini-1.5-flash',
+                            system_instruction="You are a certified professional agricultural pathologist and agronomist. Provide structured, actionable, and safety-compliant advice regarding crop diseases, IPM (Integrated Pest Management), organic treatments, and safe chemical applications."
+                        )
                         history = []
                         for msg in st.session_state.messages[:-1]:
                             if msg["role"] == "user":
                                 history.append({"role": "user", "parts": [msg["content"]]})
-                            elif msg["role"] == "assistant" and "Gemini API key" not in msg["content"]:
+                            elif msg["role"] == "assistant":
                                 history.append({"role": "model", "parts": [msg["content"]]})
                                 
                         chat = model.start_chat(history=history)
-                        
-                        with st.spinner("Thinking..."):
-                            resp = chat.send_message(prompt)
+                        with st.spinner("AI Agronomist analyzing with Gemini..."):
+                            resp = chat.send_message(active_input)
                             response = resp.text
-                            st.write(response)
+                            st.markdown(response)
                     except Exception as e:
-                        response = f"An error occurred: {str(e)}"
-                        st.error(response)
+                        st.warning(f"Gemini API note: {e}. Falling back to Local Agronomy Brain.")
+                        response = query_agronomy_brain(active_input)
+                        st.markdown(response)
+                else:
+                    with st.spinner("Querying Local Agronomic Knowledge Brain..."):
+                        time.sleep(0.3)
+                        response = query_agronomy_brain(active_input)
+                        st.markdown(response)
                         
             st.session_state.messages.append({"role": "assistant", "content": response})
         return
@@ -913,12 +995,19 @@ Generated by PlantGuard AI
                             disease_class = results['predicted_class']
                             is_healthy = results['is_healthy']
                             
+                            # Real Computer Vision Leaf Canopy & Lesion Segmentation
+                            cv_analysis = analyze_leaf_damage(image)
+                            damage_pct = cv_analysis["damage_percentage"]
+                            stage_label = cv_analysis["stage_label"]
+                            lesion_count = cv_analysis["lesion_count"]
+                            severity_color = cv_analysis["severity_color"]
+                            
                             # Confidence Threshold Check
                             if confidence < 0.20:
                                 st.warning("⚠️ The model has low confidence. Please upload a clearer leaf image for better accuracy.")
                             
-                            # Log to Database
-                            add_prediction(uploaded_file.name, disease_class.replace('_', ' '), confidence, is_healthy)
+                            # Log to Database with real CV metrics
+                            add_prediction(uploaded_file.name, disease_class.replace('_', ' '), confidence, is_healthy, damage_pct=damage_pct, severity_grade=stage_label)
                             
                             # Display Results Card
                             status_color = "healthy-text" if is_healthy else "disease-text"
@@ -927,37 +1016,61 @@ Generated by PlantGuard AI
                             html_content = f"""
                             <div class='disease-card'>
                                 <h3 style='margin-bottom: 15px;'>{status_icon} Status: <span class='{status_color}'>{disease_class.replace('_', ' ')}</span></h3>
-                                <div style='margin-bottom: 8px; color: #cbd5e1;'><strong>AI Confidence: {confidence * 100:.2f}%</strong></div>
+                                <div style='margin-bottom: 8px; color: #cbd5e1;'><strong>AI Model Confidence: {confidence * 100:.2f}%</strong></div>
                                 <div style='width: 100%; background-color: #334155; border-radius: 999px; height: 8px; margin-bottom: 20px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);'>
                                     <div style='background-color: #10b981; width: {confidence*100}%; height: 8px; border-radius: 999px; box-shadow: 0 0 10px rgba(16,185,129,0.5);'></div>
                                 </div>
                             """
                             
-                            # Calculate and display Severity Index
+                            # Display Real Computer Vision Phytopathology Severity
                             if not is_healthy:
-                                severity_index = float(confidence) # Mock severity based on confidence
-                                severity_label = "High" if severity_index > 0.8 else "Moderate"
-                                severity_icon = "🔥" if severity_index > 0.8 else "⚠️"
-                                severity_color = "#ef4444" if severity_index > 0.8 else "#f59e0b"
-                                
                                 html_content += f"""
-                                <div style='margin-bottom: 8px; color: #cbd5e1;'><strong>{severity_icon} Severity Index: {severity_label} ({severity_index * 100:.1f}%)</strong></div>
-                                <div style='width: 100%; background-color: #334155; border-radius: 999px; height: 8px; margin-bottom: 5px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);'>
-                                    <div style='background-color: {severity_color}; width: {severity_index*100}%; height: 8px; border-radius: 999px; box-shadow: 0 0 10px {severity_color};'></div>
+                                <div style='margin-bottom: 8px; color: #cbd5e1;'><strong>🔬 Foliar Lesion Surface Area: <span style='color:{severity_color};'>{damage_pct}%</span> ({stage_label})</strong></div>
+                                <div style='width: 100%; background-color: #334155; border-radius: 999px; height: 8px; margin-bottom: 12px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);'>
+                                    <div style='background-color: {severity_color}; width: {min(100.0, max(3.0, damage_pct))}%; height: 8px; border-radius: 999px; box-shadow: 0 0 10px {severity_color};'></div>
                                 </div>
+                                <div style='font-size: 0.9rem; color: #94a3b8;'>Detected <strong>{lesion_count}</strong> active necrotic/chlorotic lesion clusters across the leaf blade.</div>
+                                """
+                            else:
+                                html_content += f"""
+                                <div style='margin-bottom: 8px; color: #34d399;'><strong>🌿 Photosynthetic Health: {100.0 - damage_pct:.1f}% Vigorous Blade</strong></div>
+                                <div style='font-size: 0.9rem; color: #94a3b8;'>Clean cuticle structure with negligible lesion formation.</div>
                                 """
                                 
                             html_content += "</div>"
                             st.markdown(html_content, unsafe_allow_html=True)
                             
-                            with st.expander("📊 View Probability Distribution"):
-                                probs = results['all_probabilities']
-                                df_probs = pd.DataFrame(list(probs.items()), columns=['Disease', 'Probability']).sort_values(by='Probability', ascending=False).head(5)
-                                st.bar_chart(df_probs.set_index('Disease'))
+                            # Hands-free Audio Summary Briefing for Field Farmers
+                            speech_summary = f"PlantGuard Diagnostic Report for {uploaded_file.name}. Primary diagnosis: {disease_class.replace('_', ' ')}. AI confidence: {int(confidence * 100)} percent. Quantitative foliar damage is {damage_pct} percent, classified as {stage_label}."
+                            if not is_healthy:
+                                speech_summary += f" Immediate action recommended: {cv_analysis['field_advice']}"
+                            
+                            clean_speech = speech_summary.replace('"', '').replace("'", "").replace('\n', ' ')
+                            safe_key = uploaded_file.name.replace('.', '_').replace(' ', '_')
+                            html_audio = f"""
+                            <div style="margin: 8px 0 16px 0;">
+                                <button id="btn_{safe_key}" style="background: rgba(16, 185, 129, 0.12); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 10px; padding: 10px 20px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; font-size: 0.95rem;">
+                                    🔊 <span>Listen to Audio Diagnostic Summary (Hands-Free)</span>
+                                </button>
+                                <script>
+                                    document.getElementById('btn_{safe_key}').addEventListener('click', function() {{
+                                        if ('speechSynthesis' in window) {{
+                                            window.speechSynthesis.cancel();
+                                            var utter = new SpeechSynthesisUtterance("{clean_speech}");
+                                            utter.rate = 0.95;
+                                            window.speechSynthesis.speak(utter);
+                                        }} else {{
+                                            alert('Speech synthesis not supported in this browser.');
+                                        }}
+                                    }});
+                                </script>
+                            </div>
+                            """
+                            components.html(html_audio, height=65)
                             
                             info = get_disease_info(disease_class)
                             
-                            # Generate PDF and provide download button
+                            # Generate Heatmap image array
                             heatmap_img = None
                             if results.get('heatmap') is not None:
                                 heatmap = results['heatmap']
@@ -966,23 +1079,45 @@ Generated by PlantGuard AI
                                 
                                 original_img_arr = np.array(image.convert("RGB"))
                                 jet = cv2.resize(jet, (original_img_arr.shape[1], original_img_arr.shape[0]))
-                                superimposed_img = jet * 0.4 + original_img_arr * 0.6
+                                superimposed_img = jet * 0.45 + original_img_arr * 0.55
                                 heatmap_img = np.clip(superimposed_img, 0, 255).astype(np.uint8)
                             
-                            pdf_path = generate_pdf_report(image, heatmap_img, results, info)
+                            # Generate Enhanced PDF with CV Analysis
+                            pdf_path = generate_pdf_report(image, heatmap_img, results, info, cv_analysis=cv_analysis)
                             with open(pdf_path, "rb") as f:
                                 st.download_button(
                                     label="📄 Download Diagnostic PDF Report",
                                     data=f,
-                                    file_name=f"{uploaded_file.name}_report.pdf",
+                                    file_name=f"{uploaded_file.name}_diagnostic_report.pdf",
                                     mime="application/pdf",
-                                    key=f"dl_{uploaded_file.name}"
+                                    key=f"dl_{uploaded_file.name}",
+                                    use_container_width=True
                                 )
                             
-                            # Display Heatmap Explainability in UI
-                            if heatmap_img is not None:
-                                st.markdown("#### 🧠 AI Focus Area (Grad-CAM)")
-                                st.image(heatmap_img, caption="Grad-CAM Heatmap", use_column_width=True)
+                            st.markdown("<br>", unsafe_allow_html=True)
+                            
+                            # Visual Tabs for Inspection
+                            st.markdown("#### 🔬 Detailed Visual & Pathological Inspection")
+                            vtab1, vtab2, vtab3 = st.tabs([
+                                "🧠 AI Focus (Grad-CAM)",
+                                "🔬 CV Lesion Segmentation",
+                                "📊 Probabilities"
+                            ])
+                            
+                            with vtab1:
+                                if heatmap_img is not None:
+                                    st.image(heatmap_img, caption="Grad-CAM Convolutional Attention Heatmap (Highlights leaf areas driving model prediction)", use_column_width=True)
+                                else:
+                                    st.info("Grad-CAM visualization not available for this input.")
+                                    
+                            with vtab2:
+                                st.image(cv_analysis["overlay_image"], caption=f"Computer Vision Segmentation: Green leaf perimeter with highlighted necrotic lesions ({damage_pct}% affected)", use_column_width=True)
+                                st.info(f"**Biological Severity Assessment:** {cv_analysis['field_advice']}")
+                                
+                            with vtab3:
+                                probs = results['all_probabilities']
+                                df_probs = pd.DataFrame(list(probs.items()), columns=['Disease', 'Probability']).sort_values(by='Probability', ascending=False).head(5)
+                                st.bar_chart(df_probs.set_index('Disease'))
                             
                             # Display Disease Information and Treatment Care Prescription
                             st.markdown("### 🤖 AI Agronomist Prescription & Care Regimen")
@@ -1061,11 +1196,13 @@ Generated by PlantGuard AI
                                         st.write(info.get("nutrition_and_care", "Maintain balanced organic fertility."))
                                         
                                     st.markdown("<br>", unsafe_allow_html=True)
-                                    col_act1, col_act2 = st.columns(2)
+                                    col_act1, col_act2, col_act3 = st.columns(3)
                                     with col_act1:
-                                        st.info("⚖️ **Prepare Spray Tank:** Head to **⚖️ Spray & Dosage Calculator** in the navigation menu to compute exact dilution and water volume for this crop!")
+                                        st.info("⚖️ **Prepare Spray Tank:** Head to **⚖️ Spray & Dosage Calculator** to compute exact carrier volume & dilution!")
                                     with col_act2:
-                                        st.warning("🌦️ **Check Climate Risk:** Visit **🌦️ Disease Risk Forecaster** to see if current microclimate speeds up this pathogen!")
+                                        st.warning("🌦️ **Check Climate Risk:** Visit **🌦️ Disease Risk Forecaster** to check if weather triggers a secondary outbreak!")
+                                    with col_act3:
+                                        st.success("📅 **Growth Calendar:** Check **📅 Seasonal Spray Calendar** for proactive phenological protection milestones!")
                                 else:
                                     st.write(f"Great news! Your **{disease_class.replace('_', ' ')}** specimen is in excellent health! Here is your optimal care guide to keep it thriving:")
                                     
