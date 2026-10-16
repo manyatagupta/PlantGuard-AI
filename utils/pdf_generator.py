@@ -46,7 +46,7 @@ def create_probability_chart(probabilities, temp_dir):
     plt.close()
     return chart_path
 
-def generate_pdf_report(original_img, heatmap_img, prediction_data, disease_info):
+def generate_pdf_report(original_img, heatmap_img, prediction_data, disease_info, cv_analysis=None):
     """
     Generates a PDF report for a prediction.
     
@@ -55,6 +55,7 @@ def generate_pdf_report(original_img, heatmap_img, prediction_data, disease_info
         heatmap_img: numpy array of the Grad-CAM heatmap superimposed image.
         prediction_data: dict containing prediction results.
         disease_info: dict containing disease information.
+        cv_analysis: optional dict containing real CV damage metrics and overlay image.
         
     Returns:
         str: Path to the generated PDF file.
@@ -65,7 +66,7 @@ def generate_pdf_report(original_img, heatmap_img, prediction_data, disease_info
     # Title & Metadata
     pdf.set_font('Arial', 'B', 14)
     pdf.set_text_color(15, 23, 42)
-    pdf.cell(0, 10, 'Diagnostic Summary', 0, 1)
+    pdf.cell(0, 10, 'Diagnostic Summary & Pathology Metrics', 0, 1)
     
     pdf.set_font('Arial', '', 11)
     pdf.cell(0, 6, f'Date of Analysis: {datetime.datetime.now().strftime("%B %d, %Y - %H:%M:%S")}', 0, 1)
@@ -76,58 +77,80 @@ def generate_pdf_report(original_img, heatmap_img, prediction_data, disease_info
     if not prediction_data['is_healthy']:
         severity = "High" if prediction_data['confidence'] > 0.8 else "Moderate"
         pdf.set_text_color(220, 38, 38) if severity == "High" else pdf.set_text_color(217, 119, 6)
-        pdf.cell(0, 6, f'Severity Level: {severity}', 0, 1)
+        pdf.cell(0, 6, f'AI Model Confidence: {prediction_data["confidence"] * 100:.2f}% (Classification Severity: {severity})', 0, 1)
+        if cv_analysis:
+            pdf.set_text_color(185, 28, 28)
+            pdf.cell(0, 6, f'Quantitative Leaf Damage: {cv_analysis.get("damage_percentage", 0.0)}% Surface Area ({cv_analysis.get("stage_label", "")})', 0, 1)
+            pdf.set_text_color(71, 85, 105)
+            pdf.cell(0, 6, f'Detected Lesion Clusters: {cv_analysis.get("lesion_count", 0)} distinct necrotic/chlorotic zones', 0, 1)
     else:
         pdf.set_text_color(16, 185, 129)
-        pdf.cell(0, 6, f'Status: {status}', 0, 1)
+        pdf.cell(0, 6, f'Status: {status} (AI Confidence: {prediction_data["confidence"] * 100:.2f}%)', 0, 1)
+        if cv_analysis:
+            pdf.cell(0, 6, f'Photosynthetic Canopy Integrity: {100.0 - cv_analysis.get("damage_percentage", 0.0):.1f}% Healthy Lamina', 0, 1)
         
     pdf.set_text_color(0, 0, 0)
-    pdf.cell(0, 6, f'Confidence Score: {prediction_data["confidence"] * 100:.2f}%', 0, 1)
     
     # Draw a line
-    pdf.ln(5)
+    pdf.ln(4)
     pdf.set_draw_color(226, 232, 240)
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-    pdf.ln(5)
+    pdf.ln(4)
     
     # Images (We need to save them temporarily to add to PDF)
     temp_dir = tempfile.gettempdir()
     orig_path = os.path.join(temp_dir, "orig_leaf.jpg")
     heat_path = os.path.join(temp_dir, "heat_leaf.jpg")
+    cv_path = os.path.join(temp_dir, "cv_overlay.jpg")
     
     original_img.convert('RGB').save(orig_path)
     
     if heatmap_img is not None:
         cv2.imwrite(heat_path, cv2.cvtColor(heatmap_img, cv2.COLOR_RGB2BGR))
         
+    if cv_analysis and cv_analysis.get("overlay_image"):
+        cv_analysis["overlay_image"].convert('RGB').save(cv_path)
+        
     # Generate Chart
     chart_path = create_probability_chart(prediction_data.get('all_probabilities', {}), temp_dir)
     
-    # Add images side by side
-    pdf.set_font('Arial', 'B', 12)
+    # Add images
+    pdf.set_font('Arial', 'B', 10)
     pdf.set_text_color(71, 85, 105)
-    pdf.cell(95, 10, 'Scanned Specimen:', 0, 0, 'C')
-    if heatmap_img is not None:
-        pdf.cell(95, 10, 'AI Focus Area (Grad-CAM):', 0, 1, 'C')
+    
+    has_cv_img = cv_analysis and os.path.exists(cv_path)
+    if has_cv_img and heatmap_img is not None:
+        # 3 panels layout (each approx 60mm wide)
+        pdf.cell(63, 8, 'Original Specimen', 0, 0, 'C')
+        pdf.cell(63, 8, 'Grad-CAM Focus Area', 0, 0, 'C')
+        pdf.cell(63, 8, 'CV Lesion Segmentation', 0, 1, 'C')
+        y_img = pdf.get_y()
+        pdf.image(orig_path, x=10, y=y_img, w=58)
+        pdf.image(heat_path, x=75, y=y_img, w=58)
+        pdf.image(cv_path, x=140, y=y_img, w=58)
+        pdf.set_y(y_img + 62)
     else:
-        pdf.ln(10)
-        
-    y_before_images = pdf.get_y()
-    pdf.image(orig_path, x=10, y=y_before_images, w=80)
-    
-    if heatmap_img is not None:
-        pdf.image(heat_path, x=110, y=y_before_images, w=80)
-    
-    pdf.set_y(y_before_images + 85) # Move cursor below images
+        # 2 panels layout
+        pdf.cell(95, 8, 'Scanned Specimen:', 0, 0, 'C')
+        if heatmap_img is not None:
+            pdf.cell(95, 8, 'AI Focus Area (Grad-CAM):', 0, 1, 'C')
+        else:
+            pdf.ln(8)
+            
+        y_before_images = pdf.get_y()
+        pdf.image(orig_path, x=10, y=y_before_images, w=80)
+        if heatmap_img is not None:
+            pdf.image(heat_path, x=110, y=y_before_images, w=80)
+        pdf.set_y(y_before_images + 80)
     
     # Add chart
     if chart_path:
         pdf.image(chart_path, x=25, y=pdf.get_y(), w=160)
-        pdf.set_y(pdf.get_y() + 75)
+        pdf.set_y(pdf.get_y() + 70)
     
     pdf.set_draw_color(226, 232, 240)
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-    pdf.ln(5)
+    pdf.ln(4)
     
     # Helper to sanitize text for Latin-1 standard FPDF fonts
     def clean_txt(val):
@@ -181,10 +204,13 @@ def generate_pdf_report(original_img, heatmap_img, prediction_data, disease_info
         
     # Clean up temp files
     try:
-        os.remove(orig_path)
-        if heatmap_img is not None:
+        if os.path.exists(orig_path):
+            os.remove(orig_path)
+        if heatmap_img is not None and os.path.exists(heat_path):
             os.remove(heat_path)
-        if chart_path:
+        if os.path.exists(cv_path):
+            os.remove(cv_path)
+        if chart_path and os.path.exists(chart_path):
             os.remove(chart_path)
     except Exception:
         pass
