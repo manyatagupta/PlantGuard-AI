@@ -331,3 +331,41 @@ def calculate_disease_outbreak_risk(
         "diseases": analyzed_diseases,
         "top_threat": analyzed_diseases[0] if analyzed_diseases else None
     }
+
+def get_regional_monitoring_stations(base_lat=38.58, base_lon=-121.49, location_name="Regional Belt", base_score=50.0):
+    """
+    Generates surrounding farm weather monitoring station nodes for pydeck geospatial radar.
+    """
+    stations = []
+    offsets = [
+        ("North Valley Station", 0.15, 0.08, base_score + 6.0),
+        ("East Foothills Station", -0.05, 0.18, max(5.0, base_score - 12.0)),
+        ("South Delta Farm Cluster", -0.18, -0.10, base_score + 14.0),
+        ("West River Basin", 0.08, -0.20, base_score + 4.0),
+        ("Central Agro-Station", 0.0, 0.0, base_score)
+    ]
+    for name, d_lat, d_lon, score in offsets:
+        clamped_score = min(98.0, max(5.0, round(score, 1)))
+        if clamped_score >= 70.0:
+            color = [239, 68, 68, 200]
+            level = "Severe Threat"
+        elif clamped_score >= 45.0:
+            color = [249, 115, 22, 200]
+            level = "Elevated Alert"
+        elif clamped_score >= 25.0:
+            color = [234, 179, 8, 200]
+            level = "Moderate"
+        else:
+            color = [16, 185, 129, 200]
+            level = "Low Risk"
+            
+        stations.append({
+            "name": name,
+            "lat": base_lat + d_lat,
+            "lon": base_lon + d_lon,
+            "score": clamped_score,
+            "level": level,
+            "color": color,
+            "radius": int(clamped_score * 35 + 800)
+        })
+    return stations

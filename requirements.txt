@@ -8,3 +8,5 @@ matplotlib
 pillow
 fpdf2
 google-generativeai
+pydeck
+requests
