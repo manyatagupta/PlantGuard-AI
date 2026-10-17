@@ -221,5 +221,24 @@ class TestChemicalScanner(unittest.TestCase):
         self.assertGreater(len(rot["recommended_rotation"]), 0)
 
 
+class TestNutrientDiagnostics(unittest.TestCase):
+    """Tests for nutrient deficiency diagnosis and disease differential."""
+
+    def test_iron_chlorosis_diagnosis(self):
+        from utils.nutrient_diagnostics import diagnose_nutrient_deficiency
+        matches = diagnose_nutrient_deficiency(leaf_position="Upper young leaves", primary_symptom="Interveinal chlorosis yellow")
+        self.assertGreater(len(matches), 0)
+        top = matches[0]
+        self.assertEqual(top["nutrient"], "Iron (Fe)")
+        self.assertIn("Immobile", top["mobility"])
+
+    def test_disease_comparison(self):
+        from utils.nutrient_diagnostics import get_deficiency_vs_disease_comparison
+        comp = get_deficiency_vs_disease_comparison("Tomato Early Blight")
+        self.assertTrue(comp["matched"])
+        self.assertEqual(comp["mimicking_nutrient"], "Potassium (K)")
+        self.assertIn("differential_rule", comp)
+
+
 if __name__ == "__main__":
     unittest.main()
