@@ -261,5 +261,33 @@ class TestExportUtils(unittest.TestCase):
         self.assertIn("WALES", html)
 
 
+class TestSensorTelemetry(unittest.TestCase):
+    """Tests for IoT sensor parsing, VPD calculation, and spore hazard modeling."""
+
+    def test_calculate_vpd(self):
+        from utils.sensor_telemetry import calculate_vpd
+        res = calculate_vpd(temp_c=25.0, relative_humidity=60.0)
+        self.assertGreater(res["vpd_kpa"], 0.5)
+        self.assertLess(res["vpd_kpa"], 2.0)
+        self.assertIn("vp_sat", res)
+        self.assertIn("vp_act", res)
+
+    def test_evaluate_vpd_hazard(self):
+        from utils.sensor_telemetry import evaluate_vpd_disease_hazard
+        hazard_low = evaluate_vpd_disease_hazard(0.25)
+        self.assertIn("CRITICAL", hazard_low["hazard_level"])
+        self.assertIn("Botrytis", hazard_low["target_pathogens"][0])
+
+        hazard_optimal = evaluate_vpd_disease_hazard(1.0)
+        self.assertIn("OPTIMAL", hazard_optimal["hazard_level"])
+
+    def test_mock_iot_stream(self):
+        from utils.sensor_telemetry import generate_mock_iot_telemetry_stream
+        stream = generate_mock_iot_telemetry_stream("Sensor-01", hours=8)
+        self.assertEqual(len(stream), 8)
+        self.assertIn("vpd_kpa", stream[0])
+        self.assertIn("soil_moisture_pct", stream[0])
+
+
 if __name__ == "__main__":
     unittest.main()
