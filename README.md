@@ -14,6 +14,10 @@ PlantGuard AI is an intelligent, full-stack web application designed to help far
 
 ## ✨ Key Features
 - **🔬 Quantitative Computer Vision Leaf Damage Segmentation**: Measures exact percentage of damaged/necrotic foliar surface area (% Damaged Area) using advanced color space segmentation and assigns phytopathological severity grades (Grade 0 to Grade 4).
+- **🌱 Dual-Scan Post-Treatment Recovery & Healing Tracker**: Compares baseline pre-treatment vs follow-up post-treatment leaf scans to compute lesion reduction rate, foliar reclamation percentage, and clinical healing status.
+- **🗺️ 3D Regional Outbreak Radar (PyDeck Geospatial)**: Interactive 3D geospatial radar mapping surrounding farm weather stations, telemetry, and regional pathogen outbreak threats.
+- **💰 Commercial Treatment Pack & ROI Budget Estimator**: Automatically calculates required commercial containers/packs, application labor costs, potential crop loss avoided, and Return on Investment (ROI).
+- **🧪 1-Click Fast-Test Specimen Library**: Pre-loaded high-resolution demonstration leaves (Tomato Early Blight, Apple Scab, Healthy Leaf) for instant zero-upload evaluations.
 - **🧠 Explainable AI (Grad-CAM Heatmaps)**: Deep-learning feature activation localization using Keras 3 EfficientNetV2B0 top convolutional activations to show growers the exact leaf regions driving classification.
 - **🔊 Hands-Free Audio Diagnostic Briefing**: Integrated browser speech synthesis allowing field growers and farmers wearing work gloves to listen to diagnostic summaries hands-free.
 - **📅 Seasonal Disease & Spray Calendar**: Stage-by-stage phenological protection timelines (from dormant to harvest) for Apple, Tomato, Potato, Corn, and Bell Pepper.

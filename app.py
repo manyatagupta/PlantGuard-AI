@@ -14,11 +14,17 @@ from utils.db import (
 )
 from utils.pdf_generator import generate_pdf_report
 from utils.disease_expert import get_disease_expert_info, get_all_disease_guides
-from utils.weather_risk import fetch_live_weather, calculate_disease_outbreak_risk, WEATHER_PRESETS
+from utils.weather_risk import (
+    fetch_live_weather, calculate_disease_outbreak_risk, WEATHER_PRESETS,
+    get_regional_monitoring_stations
+)
 from utils.dosage_calculator import compute_spray_dosage, get_all_products, get_product_details, TREATMENT_DATABASE
 from utils.leaf_cv import analyze_leaf_damage
 from utils.agronomy_brain import query_agronomy_brain, SUGGESTED_QUESTIONS
 from utils.crop_calendar import get_crop_calendar, PHENOLOGY_CALENDAR
+from utils.cost_estimator import estimate_treatment_economics, DEFAULT_PRODUCT_PRICING, BENCHMARK_CROP_VALUES
+from utils.recovery_tracker import evaluate_treatment_recovery
+import pydeck as pdk
 import pandas as pd
 import datetime
 
@@ -282,6 +288,7 @@ def main():
             "Navigation", 
             [
                 "📸 Disease Scanner", 
+                "🔬 Recovery & Healing Tracker",
                 "🌦️ Disease Risk Forecaster", 
                 "⚖️ Spray & Dosage Calculator",
                 "📅 Seasonal Spray Calendar",
@@ -306,6 +313,115 @@ def main():
         
         st.markdown("---")
         st.warning("⚠️ **Disclaimer:** This is an educational tool and should not replace professional agricultural advice.")
+
+    # Recovery & Healing Tracker View
+    if page == "🔬 Recovery & Healing Tracker":
+        st.title("🔬 Post-Treatment Recovery & Healing Tracker")
+        st.markdown("### Dual-scan computer vision evaluation comparing baseline vs post-treatment foliar canopy.")
+        st.caption("Quantifies lesion surface reduction, tissue callousing, and curative therapeutic efficacy.")
+        
+        col_ctrl1, col_ctrl2 = st.columns([1.5, 2.5])
+        with col_ctrl1:
+            load_demo = st.button("🧪 Load Clinical Demo (Tomato Early Blight → Treated)", use_container_width=True)
+        with col_ctrl2:
+            st.info("💡 Compare pre-treatment diseased foliar tissue with post-treatment foliar recovery to quantitatively confirm pathogen eradication.")
+
+        if "recovery_before" not in st.session_state:
+            st.session_state["recovery_before"] = None
+        if "recovery_after" not in st.session_state:
+            st.session_state["recovery_after"] = None
+
+        if load_demo:
+            st.session_state["recovery_before"] = "assets/samples/tomato_early_blight.jpg"
+            st.session_state["recovery_after"] = "assets/samples/healthy_leaf.jpg"
+
+        col_up1, col_up2 = st.columns(2)
+        with col_up1:
+            st.markdown("##### 1️⃣ Baseline Scan (Pre-Treatment)")
+            up_before = st.file_uploader("Upload Pre-Treatment Leaf", type=["jpg", "jpeg", "png"], key="uploader_before")
+            if up_before:
+                st.session_state["recovery_before"] = up_before
+
+            if st.session_state["recovery_before"]:
+                img_before_show = Image.open(st.session_state["recovery_before"])
+                st.image(img_before_show, caption="Specimen A: Baseline Infection", use_column_width=True)
+
+        with col_up2:
+            st.markdown("##### 2️⃣ Follow-up Scan (Post-Treatment)")
+            up_after = st.file_uploader("Upload Post-Treatment Leaf", type=["jpg", "jpeg", "png"], key="uploader_after")
+            if up_after:
+                st.session_state["recovery_after"] = up_after
+
+            if st.session_state["recovery_after"]:
+                img_after_show = Image.open(st.session_state["recovery_after"])
+                st.image(img_after_show, caption="Specimen B: Follow-up Canopy", use_column_width=True)
+
+        st.markdown("---")
+        if st.session_state["recovery_before"] and st.session_state["recovery_after"]:
+            if st.button("🔬 Execute Quantitative Recovery Analysis", use_container_width=True):
+                with st.spinner("Executing ExG color space segmentation, lesion count delta, and healing evaluation..."):
+                    img_b = Image.open(st.session_state["recovery_before"])
+                    img_a = Image.open(st.session_state["recovery_after"])
+                    
+                    rec = evaluate_treatment_recovery(img_b, img_a)
+                    
+                    # Status Banner
+                    st.markdown(f"""
+                    <div class='disease-card' style='border-color: {rec["status_color"]}; margin: 20px 0;'>
+                        <div style='display: flex; justify-content: space-between; align-items: center;'>
+                            <div>
+                                <h3 style='margin:0; color: {rec["status_color"]};'>{rec["status"]}</h3>
+                                <p style='color: #cbd5e1; margin: 8px 0 0 0;'>{rec["guidance"]}</p>
+                            </div>
+                            <div style='text-align: right; min-width: 140px;'>
+                                <span style='font-size: 2.8rem; font-weight: 800; color: {rec["status_color"]};'>+{rec["recovery_pct"]}%</span>
+                                <div style='font-weight: 600; color: #94a3b8;'>EFFICACY RATING</div>
+                            </div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # 4 KPI Cards
+                    col_k1, col_k2, col_k3, col_k4 = st.columns(4)
+                    with col_k1:
+                        st.markdown(f"""
+                        <div class='metric-card'>
+                            <div class='metric-title'>Pre-Treatment Damage</div>
+                            <div class='metric-value' style='font-size: 2.2rem; color: #f87171;'>{rec["dmg_before"]}%</div>
+                            <div style='color: #94a3b8; font-size: 0.85rem;'>{rec["stage_before"]}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    with col_k2:
+                        st.markdown(f"""
+                        <div class='metric-card'>
+                            <div class='metric-title'>Post-Treatment Damage</div>
+                            <div class='metric-value' style='font-size: 2.2rem; color: #34d399;'>{rec["dmg_after"]}%</div>
+                            <div style='color: #94a3b8; font-size: 0.85rem;'>{rec["stage_after"]}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    with col_k3:
+                        st.markdown(f"""
+                        <div class='metric-card'>
+                            <div class='metric-title'>Lesion Area Reduction</div>
+                            <div class='metric-value' style='font-size: 2.2rem;'>{rec["delta_damage"]}%</div>
+                            <div style='color: #94a3b8; font-size: 0.85rem;'>Net Foliar Reclamation</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    with col_k4:
+                        st.markdown(f"""
+                        <div class='metric-card'>
+                            <div class='metric-title'>Active Lesion Count</div>
+                            <div class='metric-value' style='font-size: 2.2rem;'>{rec["lesions_before"]} → {rec["lesions_after"]}</div>
+                            <div style='color: #94a3b8; font-size: 0.85rem;'>Individual Infection Spots</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    st.markdown("#### 🔬 Computer Vision Dual Overlay Comparison")
+                    st.image(rec["composite_image"], caption="Left: Baseline Lesion Detection (Red Mask) | Right: Post-Treatment Foliar Surface", use_column_width=True)
+        else:
+            st.info("👆 Please upload or load both Baseline and Follow-up leaf images above to perform healing evaluation.")
+        return
 
     # Seasonal Spray Calendar View
     if page == "📅 Seasonal Spray Calendar":
@@ -760,6 +876,65 @@ def main():
                     
                 st.markdown(f"**🛡️ Pre-emptive Countermeasure:**\n{d['advice']}")
                 
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("#### 🗺️ 3D Regional Outbreak Radar & Geospatial Stations")
+        st.caption("Real-time telemetry and pathogen pressure contours across adjacent agricultural farm monitoring nodes.")
+
+        # Determine coordinates from current station or defaults
+        curr_loc_name = w.get("location_label", "Davis Agricultural Valley, CA")
+        lat = 38.54
+        lon = -121.74
+        for p_name, p_val in WEATHER_PRESETS.items():
+            if p_name in curr_loc_name or curr_loc_name in p_name:
+                lat = p_val["lat"]
+                lon = p_val["lon"]
+                break
+
+        stations = get_regional_monitoring_stations(base_lat=lat, base_lon=lon, location_name=curr_loc_name, base_score=score)
+        stations_df = pd.DataFrame(stations)
+
+        view_state = pdk.ViewState(
+            latitude=lat,
+            longitude=lon,
+            zoom=9.5,
+            pitch=35,
+            bearing=15
+        )
+
+        scatter_layer = pdk.Layer(
+            "ScatterplotLayer",
+            data=stations_df,
+            get_position=["lon", "lat"],
+            get_color="color",
+            get_radius="radius",
+            pickable=True,
+            auto_highlight=True,
+            opacity=0.8,
+            stroked=True,
+            filled=True,
+            radius_scale=1,
+            radius_min_pixels=10,
+            radius_max_pixels=75,
+            line_width_min_pixels=2,
+            get_line_color=[255, 255, 255, 180]
+        )
+
+        r = pdk.Deck(
+            layers=[scatter_layer],
+            initial_view_state=view_state,
+            tooltip={"text": "{name}\nThreat Level: {level} ({score}% Outbreak Index)\nCoordinates: {lat}, {lon}"},
+            map_style="dark"
+        )
+        st.pydeck_chart(r)
+
+        with st.expander("📡 Regional Monitoring Station Telemetry", expanded=False):
+            st.dataframe(
+                stations_df[["name", "level", "score", "lat", "lon"]].rename(
+                    columns={"name": "Station Name", "level": "Threat Level", "score": "Risk Index (%)", "lat": "Latitude", "lon": "Longitude"}
+                ),
+                use_container_width=True
+            )
+                
         return
 
     # Spray & Dosage Calculator View
@@ -867,6 +1042,72 @@ def main():
                 st.markdown(f"**⏳ Pre-Harvest Interval (PHI):** `{dosage_res['phi_days']} Days`")
                 st.markdown(f"**🚫 Re-Entry Interval (REI):** `{dosage_res['rei_hours']} Hours`")
                 
+            # Commercial Treatment Economics & ROI Expander
+            st.markdown("<br>", unsafe_allow_html=True)
+            with st.expander("💰 Commercial Pack Purchasing & ROI Estimator", expanded=True):
+                st.markdown("##### Estimate commercial container purchases, application labor, and financial ROI.")
+                
+                col_ec1, col_ec2 = st.columns(2)
+                with col_ec1:
+                    bench = DEFAULT_PRODUCT_PRICING.get(selected_product, {"pack_size": 1000, "unit": dosage_res['active_unit'], "price": 28.0})
+                    custom_price = st.number_input(
+                        f"Commercial Pack Price ($ USD per {bench['pack_size']}{bench['unit']}):",
+                        min_value=1.0, value=float(bench["price"]), step=2.0
+                    )
+                    labor_rate = st.number_input("Field Sprayer Labor Rate ($ / hour):", min_value=5.0, value=18.0, step=1.0)
+                with col_ec2:
+                    loss_risk = st.slider("Estimated Potential Crop Loss Without Treatment (%):", min_value=5, max_value=85, value=35, step=5)
+                    crop_val_bench = BENCHMARK_CROP_VALUES.get(area_unit, 1.0) * float(area_val)
+                    crop_rev = st.number_input("Estimated Total Harvest Revenue ($ USD):", min_value=0.0, value=float(round(crop_val_bench, 2)), step=50.0)
+
+                econ = estimate_treatment_economics(
+                    product_name=selected_product,
+                    active_amount=dosage_res['active_amount'],
+                    active_unit=dosage_res['active_unit'],
+                    area_type=area_unit,
+                    area_val=float(area_val),
+                    custom_price_per_pack=custom_price,
+                    custom_labor_rate=labor_rate,
+                    crop_value_estimate=crop_rev if crop_rev > 0 else None,
+                    untreated_loss_pct=float(loss_risk)
+                )
+                
+                col_ei1, col_ei2 = st.columns(2)
+                with col_ei1:
+                    st.markdown(f"""
+                    <div class='metric-card' style='padding: 18px 12px; margin-bottom: 12px;'>
+                        <div class='metric-title'>Containers Needed</div>
+                        <div class='metric-value' style='font-size: 2rem;'>{econ['packs_needed']} <span style='font-size:1.1rem; color:#94a3b8;'>Packs</span></div>
+                        <div style='color: #cbd5e1; font-size: 0.85rem;'>{econ['pack_size']}{econ['pack_unit']} per pack (${econ['total_product_cost']})</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                with col_ei2:
+                    st.markdown(f"""
+                    <div class='metric-card' style='padding: 18px 12px; margin-bottom: 12px;'>
+                        <div class='metric-title'>Labor & Spraying</div>
+                        <div class='metric-value' style='font-size: 2rem;'>${econ['labor_cost']}</div>
+                        <div style='color: #cbd5e1; font-size: 0.85rem;'>approx. {econ['labor_hours']} application hours</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                st.markdown(f"""
+                <div style='background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 16px; padding: 18px; margin: 10px 0;'>
+                    <div style='display:flex; justify-content:space-between; align-items:center;'>
+                        <div>
+                            <div style='color: #94a3b8; font-size: 0.9rem; text-transform:uppercase;'>Protected Harvest Value</div>
+                            <div style='color: #34d399; font-size: 1.8rem; font-weight:800;'>${econ['potential_crop_loss']} Saved</div>
+                        </div>
+                        <div style='text-align:right;'>
+                            <div style='color: #94a3b8; font-size: 0.9rem; text-transform:uppercase;'>Treatment ROI</div>
+                            <div style='color: #10b981; font-size: 1.8rem; font-weight:800;'>{econ['roi_ratio']}x Return</div>
+                        </div>
+                    </div>
+                    <div style='margin-top: 10px; color: #cbd5e1; font-size: 0.9rem;'>
+                        Total investment of <strong>${econ['total_investment']}</strong> (product + labor) safeguards <strong>${econ['potential_crop_loss']}</strong> in yield loss, generating <strong>${econ['net_economic_savings']}</strong> in net economic savings.
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
             # Printable Prescription Text Download
             recipe_text = f"""PLANTGUARD AI - SPRAY & FERTILIZER PRESCRIPTION SHEET
 =============================================================
@@ -887,6 +1128,11 @@ SAFETY & COMPLIANCE:
 - Field Re-Entry Interval (REI): {dosage_res['rei_hours']} Hours
 - Required PPE: {dosage_res['ppe']}
 - Recommended Window: {dosage_res['best_time']}
+
+ECONOMIC & TREATMENT BUDGET ESTIMATE:
+- Commercial Packs Required: {econ['packs_needed']} x {econ['pack_size']}{econ['pack_unit']} (${econ['total_product_cost']})
+- Application Labor: ~{econ['labor_hours']} hrs (${econ['labor_cost']})
+- Total Investment: ${econ['total_investment']} (Estimated Saved Crop ROI: {econ['roi_ratio']}x)
 =============================================================
 Generated by PlantGuard AI
 """
@@ -924,9 +1170,14 @@ Generated by PlantGuard AI
 
     st.markdown("#### 📷 Input Leaf Image")
     
+    class LocalImageFile:
+        def __init__(self, path):
+            self.path = path
+            self.name = os.path.basename(path)
+            
     images_to_process = []
     
-    tab1, tab2, tab3 = st.tabs(["📁 Upload Image(s)", "📸 Take a Photo", "📂 Local Folder"])
+    tab1, tab2, tab3, tab4 = st.tabs(["📁 Upload Image(s)", "📸 Take a Photo", "📂 Local Folder", "🧪 Demo Specimens (1-Click)"])
     
     with tab1:
         uploaded_files = st.file_uploader("Choose images...", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
@@ -949,11 +1200,6 @@ Generated by PlantGuard AI
             local_files = [os.path.join(folder_path, f) for f in os.listdir(folder_path) if f.lower().endswith(valid_extensions)]
             if local_files:
                 st.success(f"Found {len(local_files)} images in folder.")
-                
-                class LocalImageFile:
-                    def __init__(self, path):
-                        self.path = path
-                        self.name = os.path.basename(path)
                         
                 if st.button(f"Queue Images for Analysis"):
                     # Limit to a reasonable number to avoid locking up the processing forever
@@ -966,6 +1212,30 @@ Generated by PlantGuard AI
                 st.warning("No valid images found in the specified folder.")
         elif folder_path:
             st.error("Directory does not exist. Please check the path.")
+
+    with tab4:
+        st.markdown("##### 🔬 Instant-Test Verified Specimen Library")
+        st.caption("Instantly test the AI neural network and computer vision lesion segmenter without needing to upload local files.")
+        
+        sample_cols = st.columns(3)
+        sample_specs = [
+            ("Tomato Early Blight", "assets/samples/tomato_early_blight.jpg", "Fungal concentric target spots with chlorotic halo."),
+            ("Apple Scab", "assets/samples/apple_scab.jpg", "Olive-green to dark brown velvety foliar lesions."),
+            ("Healthy Green Leaf", "assets/samples/healthy_leaf.jpg", "Pristine photosynthetic surface with intact chlorophyll.")
+        ]
+        
+        for idx, (title, img_path, desc) in enumerate(sample_specs):
+            with sample_cols[idx]:
+                if os.path.exists(img_path):
+                    st.image(img_path, caption=title, use_column_width=True)
+                st.markdown(f"**{title}**")
+                st.caption(desc)
+                if st.button(f"⚡ Load Specimen", key=f"demo_btn_{idx}", use_container_width=True):
+                    st.session_state["queued_demo_leaf"] = img_path
+
+        if st.session_state.get("queued_demo_leaf") and os.path.exists(st.session_state["queued_demo_leaf"]):
+            st.success(f"Loaded demo specimen: `{os.path.basename(st.session_state['queued_demo_leaf'])}`")
+            images_to_process.append(LocalImageFile(st.session_state["queued_demo_leaf"]))
             
     if images_to_process:
         st.markdown("---")
