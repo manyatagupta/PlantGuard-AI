@@ -24,6 +24,10 @@ from utils.agronomy_brain import query_agronomy_brain, SUGGESTED_QUESTIONS
 from utils.crop_calendar import get_crop_calendar, PHENOLOGY_CALENDAR
 from utils.cost_estimator import estimate_treatment_economics, DEFAULT_PRODUCT_PRICING, BENCHMARK_CROP_VALUES
 from utils.recovery_tracker import evaluate_treatment_recovery
+from utils.chemical_scanner import lookup_chemical_by_epa_or_name, get_all_chemical_catalog, get_frac_rotation_guidance
+from utils.nutrient_diagnostics import diagnose_nutrient_deficiency, get_deficiency_vs_disease_comparison, NUTRIENT_DEFICIENCIES
+from utils.export_utils import export_predictions_to_csv_string, generate_field_audit_checklist_html
+from utils.sensor_telemetry import calculate_vpd, evaluate_vpd_disease_hazard, generate_mock_iot_telemetry_stream
 import pydeck as pdk
 import pandas as pd
 import datetime
@@ -289,6 +293,8 @@ def main():
             [
                 "📸 Disease Scanner", 
                 "🔬 Recovery & Healing Tracker",
+                "🧪 Abiotic Nutrient Diagnostic Matrix",
+                "📡 IoT Microclimate & VPD Telemetry",
                 "🌦️ Disease Risk Forecaster", 
                 "⚖️ Spray & Dosage Calculator",
                 "📅 Seasonal Spray Calendar",
@@ -423,6 +429,109 @@ def main():
             st.info("👆 Please upload or load both Baseline and Follow-up leaf images above to perform healing evaluation.")
         return
 
+    # Abiotic Nutrient Diagnostic Matrix View
+    if page == "🧪 Abiotic Nutrient Diagnostic Matrix":
+        st.title("🧪 Abiotic Plant Nutrient Deficiency & Cross-Diagnostic Matrix")
+        st.markdown("### Distinguish physiological nutrient disorders from biotic fungal, bacterial, and viral foliar diseases.")
+        st.caption("Up to 40% of leaf discolorations are abiotic imbalances (Nitrogen, Potassium, Iron, Calcium, Magnesium) rather than infectious pathogens.")
+        
+        col_nd1, col_nd2 = st.columns([1, 1], gap="large")
+        with col_nd1:
+            st.markdown("#### 1️⃣ Symptom Observation on Specimen")
+            leaf_loc = st.selectbox(
+                "🌿 Canopy Leaf Position:",
+                [
+                    "Upper young leaves / Shoots (Immobile elements)",
+                    "Lower mature leaves (Mobile elements: N, P, K, Mg)",
+                    "Fruit / Blossom End (Calcium mobility issue)"
+                ]
+            )
+            
+            symptom_choice = st.selectbox(
+                "🔍 Primary Foliar Pattern:",
+                [
+                    "Interveinal chlorosis (veins emerald green, leaf yellow)",
+                    "Marginal scorch / crispy brown leaf edges ('tip burn')",
+                    "Uniform pale yellowing starting from leaf tip",
+                    "Reddish-purple or bronze pigmentation on undersides",
+                    "Distorted, hooked tips with blossom end rot on fruit"
+                ]
+            )
+            
+            st.markdown("---")
+            st.markdown("#### 🔍 Cross-Disease Differential Check")
+            suspected_disease = st.selectbox(
+                "Compare against suspected infectious pathogen:",
+                ["Tomato Early Blight", "Late Blight", "Powdery Mildew", "Fusarium Wilt", "Septoria Leaf Spot"]
+            )
+            comp_diff = get_deficiency_vs_disease_comparison(suspected_disease)
+            st.info(f"**Commonly Mimics:** `{comp_diff['mimicking_nutrient']}`\n\n**Differential Rule:** {comp_diff['differential_rule']}")
+
+        with col_nd2:
+            st.markdown("#### 2️⃣ Ranked Nutritional Diagnosis")
+            diagnoses = diagnose_nutrient_deficiency(leaf_loc, symptom_choice)
+            
+            if diagnoses:
+                for idx, d in enumerate(diagnoses[:3]):
+                    with st.expander(f"🔬 Rank #{idx+1}: **{d['nutrient']}** — Confidence: {d['confidence_score']}%", expanded=(idx==0)):
+                        st.markdown(f"**Mobility:** `{d['mobility']}`")
+                        st.markdown(f"**Visual Symptom:** {d['symptoms']}")
+                        st.markdown(f"**Confused with Diseases:** {', '.join(d['confused_with'])}")
+                        st.warning(f"💡 **How to Tell Apart:** {d['differential_rule']}")
+                        st.markdown(f"**🌱 Soil Amendment:** {d['remedy']}")
+                        st.success(f"⚡ **Emergency Foliar Spray:** {d['emergency_spray']}")
+            else:
+                st.info("Select symptoms on the left to view ranked nutritional diagnoses.")
+                
+        return
+
+    # IoT Microclimate & VPD Telemetry View
+    if page == "📡 IoT Microclimate & VPD Telemetry":
+        st.title("📡 Real-time IoT Microclimate & VPD Outbreak Monitor")
+        st.markdown("### Psychrometric Vapor Pressure Deficit (VPD) modeling and farm sensor node telemetry.")
+        st.caption("Low VPD (<0.4 kPa) creates stagnant moisture films that trigger exponential fungal zoospore germination.")
+        
+        col_vpd1, col_vpd2 = st.columns([1, 1], gap="large")
+        with col_vpd1:
+            st.markdown("#### 🎛️ Live Sensor Calibration")
+            t_input = st.slider("Ambient Canopy Temperature (°C):", min_value=10.0, max_value=45.0, value=22.0, step=0.5)
+            rh_input = st.slider("Relative Canopy Humidity (%):", min_value=20.0, max_value=100.0, value=88.0, step=1.0)
+            
+            vpd_data = calculate_vpd(t_input, rh_input)
+            hazard_info = evaluate_vpd_disease_hazard(vpd_data["vpd_kpa"])
+            
+            st.markdown(f"""
+            <div class='disease-card' style='border-color: {hazard_info["hazard_color"]}; margin: 20px 0;'>
+                <div style='display:flex; justify-content:space-between; align-items:center;'>
+                    <div>
+                        <h3 style='margin:0; color:{hazard_info["hazard_color"]};'>{hazard_info["hazard_badge"]}</h3>
+                        <p style='color:#cbd5e1; margin:6px 0 0 0;'>{hazard_info["summary"]}</p>
+                    </div>
+                    <div style='text-align:right;'>
+                        <span style='font-size:2.8rem; font-weight:800; color:{hazard_info["hazard_color"]};'>{vpd_data["vpd_kpa"]}</span>
+                        <div style='color:#94a3b8; font-weight:600;'>kPa VPD</div>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.error(f"🚨 **High-Risk Fungal Pathogens:** {', '.join(hazard_info['target_pathogens'])}")
+            st.info(f"⚙️ **Automated Actuator / Field Action:** {hazard_info['field_action']}")
+            
+        with col_vpd2:
+            st.markdown("#### 📈 8-Hour LoRaWAN Sensor Node Stream")
+            st.caption("Node #04 — South Greenhouse / Valley Block 2")
+            stream_data = generate_mock_iot_telemetry_stream(hours=8)
+            df_stream = pd.DataFrame(stream_data).set_index("timestamp")
+            
+            st.line_chart(df_stream[["vpd_kpa", "temperature_c", "humidity_pct"]])
+            st.markdown("##### 📡 Latest Probe Sensor Telemetry")
+            st.dataframe(df_stream[["temperature_c", "humidity_pct", "soil_moisture_pct", "vpd_kpa", "hazard_level"]].rename(
+                columns={"temperature_c": "Temp (°C)", "humidity_pct": "Humidity (%)", "soil_moisture_pct": "Soil Moisture (%)", "vpd_kpa": "VPD (kPa)", "hazard_level": "Status"}
+            ), use_container_width=True)
+            
+        return
+
     # Seasonal Spray Calendar View
     if page == "📅 Seasonal Spray Calendar":
         st.title("📅 Seasonal Crop Protection & Spray Calendar")
@@ -518,17 +627,27 @@ def main():
         
         st.dataframe(df_all, use_container_width=True)
         
-        col_dl, col_clr = st.columns([2, 1])
+        col_dl, col_chk, col_clr = st.columns([1.5, 1.5, 1])
         with col_dl:
             if not df_all.empty:
-                csv = df_all.to_csv(index=False).encode('utf-8')
+                recent_recs = get_recent_predictions(limit=1000)
+                csv_rfc = export_predictions_to_csv_string(recent_recs)
                 st.download_button(
-                    label="📥 Download Historical Data as CSV",
-                    data=csv,
-                    file_name=f'plantguard_history_{datetime.datetime.now().strftime("%Y%m%d")}.csv',
+                    label="📥 Download RFC-4180 Excel CSV",
+                    data=csv_rfc.encode("utf-8"),
+                    file_name=f'plantguard_telemetry_{datetime.datetime.now().strftime("%Y%m%d")}.csv',
                     mime='text/csv',
                     use_container_width=True
                 )
+        with col_chk:
+            checklist_html = generate_field_audit_checklist_html()
+            st.download_button(
+                label="📋 Print Field Scouting Sheet (.html)",
+                data=checklist_html,
+                file_name=f'plantguard_field_scouting_sheet_{datetime.datetime.now().strftime("%Y%m%d")}.html',
+                mime='text/html',
+                use_container_width=True
+            )
         with col_clr:
             with st.expander("🗑️ Reset Database History"):
                 st.warning("This will erase all past scans from the local database.")
@@ -1108,6 +1227,30 @@ def main():
                 </div>
                 """, unsafe_allow_html=True)
                 
+            # EPA Chemical Registration & FRAC Code Lookup
+            st.markdown("<br>", unsafe_allow_html=True)
+            with st.expander("🏷️ EPA Chemical Registration & FRAC Resistance Lookup", expanded=False):
+                st.markdown("##### Verify EPA Registration Number, active ingredient purity, and resistance rotation.")
+                chem_query = st.text_input("Enter EPA Reg. No (e.g., 100-1098, 70051-107, 4-61, 264-1152) or Trade Name:", value="100-1098")
+                chem_res = lookup_chemical_by_epa_or_name(chem_query)
+                if chem_res["match_found"]:
+                    rec = chem_res["record"]
+                    st.success(f"**{rec['trade_name']}** — EPA Reg. No: `{rec['epa_reg_no']}`")
+                    col_ch1, col_ch2 = st.columns(2)
+                    with col_ch1:
+                        st.markdown(f"**Active Ingredient:** {rec['active_ingredient']}")
+                        st.markdown(f"**FRAC Group:** `{rec['frac_group']}`")
+                        st.markdown(f"**Resistance Risk:** `{rec['resistance_risk']}`")
+                        st.markdown(f"**Signal Word:** `{rec['signal_word']}`")
+                    with col_ch2:
+                        st.markdown(f"**Max Applications/Year:** `{rec['max_annual_apps']}`")
+                        st.markdown(f"**Rainfastness:** `{rec['rainfast_hours']} Hours`")
+                        st.markdown(f"**Pollinators / Bees:** {rec['pollinator_safety']}")
+                        st.markdown(f"**Tank Mix Restrictions:** {', '.join(rec['restricted_mixes'])}")
+                    st.info(f"🔄 **Anti-Resistance FRAC Rotation:** Rotate with {', '.join(rec['recommended_rotation'])}")
+                else:
+                    st.warning(chem_res["message"])
+
             # Printable Prescription Text Download
             recipe_text = f"""PLANTGUARD AI - SPRAY & FERTILIZER PRESCRIPTION SHEET
 =============================================================
