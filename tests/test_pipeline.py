@@ -198,5 +198,28 @@ class TestDatabase(unittest.TestCase):
         self.assertGreater(stats["total"], 0)
 
 
+class TestChemicalScanner(unittest.TestCase):
+    """Tests for EPA chemical registration and FRAC resistance engine."""
+
+    def test_lookup_by_epa(self):
+        from utils.chemical_scanner import lookup_chemical_by_epa_or_name
+        res = lookup_chemical_by_epa_or_name("100-1098")
+        self.assertTrue(res["match_found"])
+        self.assertEqual(res["record"]["trade_name"], "Heritage 50 WDG")
+        self.assertIn("Group 11", res["record"]["frac_group"])
+
+    def test_lookup_by_trade_name(self):
+        from utils.chemical_scanner import lookup_chemical_by_epa_or_name
+        res = lookup_chemical_by_epa_or_name("Trilogy")
+        self.assertTrue(res["match_found"])
+        self.assertIn("Neem", res["record"]["active_ingredient"])
+
+    def test_frac_rotation_guidance(self):
+        from utils.chemical_scanner import get_frac_rotation_guidance
+        rot = get_frac_rotation_guidance("Group 11")
+        self.assertEqual(rot["risk_level"], "HIGH")
+        self.assertGreater(len(rot["recommended_rotation"]), 0)
+
+
 if __name__ == "__main__":
     unittest.main()
