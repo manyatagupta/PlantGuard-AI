@@ -240,5 +240,26 @@ class TestNutrientDiagnostics(unittest.TestCase):
         self.assertIn("differential_rule", comp)
 
 
+class TestExportUtils(unittest.TestCase):
+    """Tests for CSV telemetry export and HTML field checklist generation."""
+
+    def test_export_csv_string(self):
+        from utils.export_utils import export_predictions_to_csv_string
+        sample_preds = [
+            {"timestamp": "2026-10-17 12:00:00", "filename": "sample.jpg", "class": "Tomato Early blight", "conf": 0.92, "is_healthy": False, "damage_pct": 14.2, "severity_grade": "Grade 2"}
+        ]
+        csv_str = export_predictions_to_csv_string(sample_preds)
+        self.assertIn("Tomato Early blight", csv_str)
+        self.assertIn("14.2", csv_str)
+        self.assertTrue(csv_str.startswith("\ufeff"))
+
+    def test_generate_checklist_html(self):
+        from utils.export_utils import generate_field_audit_checklist_html
+        html = generate_field_audit_checklist_html("Test Vineyard", "Agronomist John", ["Apple", "Grape"])
+        self.assertIn("Test Vineyard", html)
+        self.assertIn("Agronomist John", html)
+        self.assertIn("WALES", html)
+
+
 if __name__ == "__main__":
     unittest.main()
