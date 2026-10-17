@@ -3,6 +3,8 @@
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue?style=for-the-badge&logo=python)
 ![TensorFlow](https://img.shields.io/badge/TensorFlow-2.x-orange?style=for-the-badge&logo=tensorflow)
 ![Streamlit](https://img.shields.io/badge/Streamlit-1.x-red?style=for-the-badge&logo=streamlit)
+![Tests](https://img.shields.io/badge/Tests-22%20Passed-brightgreen?style=for-the-badge&logo=pytest)
+![CI](https://img.shields.io/badge/CI-Automated-success?style=for-the-badge&logo=githubactions)
 ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
 ![PlantGuard AI Header](https://via.placeholder.com/1200x300.png?text=PlantGuard+AI+-+Plant+Disease+Detection+System)
@@ -15,6 +17,10 @@ PlantGuard AI is an intelligent, full-stack web application designed to help far
 ## ✨ Key Features
 - **🔬 Quantitative Computer Vision Leaf Damage Segmentation**: Measures exact percentage of damaged/necrotic foliar surface area (% Damaged Area) using advanced color space segmentation and assigns phytopathological severity grades (Grade 0 to Grade 4).
 - **🌱 Dual-Scan Post-Treatment Recovery & Healing Tracker**: Compares baseline pre-treatment vs follow-up post-treatment leaf scans to compute lesion reduction rate, foliar reclamation percentage, and clinical healing status.
+- **🧪 Abiotic Nutrient Deficiency & Pathology Differential Matrix**: Cross-references symptoms with plant nutrient mobility (N, P, K, Ca, Mg, Fe) to distinguish between nutrient stress and infectious pathogens.
+- **📡 Agricultural IoT Microclimate & VPD Outbreak Engine**: Computes psychrometric Vapor Pressure Deficit (VPD in kPa) from sensor streams to predict fungal spore germination risks.
+- **🏷️ EPA Chemical Registration & FRAC Code Resistance Engine**: Looks up commercial fungicides by EPA registration number or barcode to decode active ingredients, pollinator toxicity, and anti-resistance rotation partners.
+- **📋 Offline Field Scouting Audit Sheet & RFC-4180 CSV Exporter**: Generates printable HTML clipboard scouting sheets for farmhands and exports full historical diagnostic audits with BOM-encoded CSV.
 - **🗺️ 3D Regional Outbreak Radar (PyDeck Geospatial)**: Interactive 3D geospatial radar mapping surrounding farm weather stations, telemetry, and regional pathogen outbreak threats.
 - **💰 Commercial Treatment Pack & ROI Budget Estimator**: Automatically calculates required commercial containers/packs, application labor costs, potential crop loss avoided, and Return on Investment (ROI).
 - **🧪 1-Click Fast-Test Specimen Library**: Pre-loaded high-resolution demonstration leaves (Tomato Early Blight, Apple Scab, Healthy Leaf) for instant zero-upload evaluations.
@@ -109,6 +115,13 @@ Once the model is trained (or if you already have the `.keras` file in the `mode
    streamlit run app.py
    ```
 2. Open your browser and navigate to `http://localhost:8501`.
+
+## 🧪 Automated Agricultural Test Pipeline
+PlantGuard AI includes a 22-point unit and integration test suite covering computer vision lesion segmentation, treatment economics, recovery metrics, IoT VPD calculations, and EPA chemical registries:
+
+```bash
+python run_tests.py
+```
 
 ## 🔮 Future Improvements
 - **Multi-leaf detection**: Implement object detection (e.g., YOLO) to identify multiple diseased spots on a single plant.
