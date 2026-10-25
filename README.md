@@ -3,7 +3,7 @@
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue?style=for-the-badge&logo=python)
 ![TensorFlow](https://img.shields.io/badge/TensorFlow-2.x-orange?style=for-the-badge&logo=tensorflow)
 ![Streamlit](https://img.shields.io/badge/Streamlit-1.x-red?style=for-the-badge&logo=streamlit)
-![Tests](https://img.shields.io/badge/Tests-22%20Passed-brightgreen?style=for-the-badge&logo=pytest)
+![Tests](https://img.shields.io/badge/Tests-25%20Passed-brightgreen?style=for-the-badge&logo=pytest)
 ![CI](https://img.shields.io/badge/CI-Automated-success?style=for-the-badge&logo=githubactions)
 ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
@@ -15,6 +15,7 @@ PlantGuard AI is an intelligent, full-stack web application designed to help far
 **⚠️ Disclaimer:** This system is built for educational and assistive purposes and should not replace professional agricultural advice.
 
 ## ✨ Key Features
+- **📦 Multi-Leaf Canopy Batch Scanner & Canopy Health Index (CHI)**: High-throughput batch foliage processor that surveys entire tree canopies or crop rows simultaneously, computes aggregate Canopy Health Index (CHI from 0 to 100), performs automated phytopathological triage (Critical, Warning, Mild, Healthy), provides side-by-side lesion mask galleries, and exports RFC-4180 batch CSV reports.
 - **🔬 Quantitative Computer Vision Leaf Damage Segmentation**: Measures exact percentage of damaged/necrotic foliar surface area (% Damaged Area) using advanced color space segmentation and assigns phytopathological severity grades (Grade 0 to Grade 4).
 - **🌱 Dual-Scan Post-Treatment Recovery & Healing Tracker**: Compares baseline pre-treatment vs follow-up post-treatment leaf scans to compute lesion reduction rate, foliar reclamation percentage, and clinical healing status.
 - **🧪 Abiotic Nutrient Deficiency & Pathology Differential Matrix**: Cross-references symptoms with plant nutrient mobility (N, P, K, Ca, Mg, Fe) to distinguish between nutrient stress and infectious pathogens.
@@ -117,7 +118,7 @@ Once the model is trained (or if you already have the `.keras` file in the `mode
 2. Open your browser and navigate to `http://localhost:8501`.
 
 ## 🧪 Automated Agricultural Test Pipeline
-PlantGuard AI includes a 22-point unit and integration test suite covering computer vision lesion segmentation, treatment economics, recovery metrics, IoT VPD calculations, and EPA chemical registries:
+PlantGuard AI includes a 25-point unit and integration test suite covering computer vision lesion segmentation, canopy batch processing, treatment economics, recovery metrics, IoT VPD calculations, and EPA chemical registries:
 
 ```bash
 python run_tests.py

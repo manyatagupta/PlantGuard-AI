@@ -289,5 +289,82 @@ class TestSensorTelemetry(unittest.TestCase):
         self.assertIn("soil_moisture_pct", stream[0])
 
 
+class TestBatchScanner(unittest.TestCase):
+    """Tests for multi-leaf canopy batch processor, CHI index, and CSV export."""
+
+    def test_batch_processing_synthetic(self):
+        from utils.batch_scanner import process_leaf_batch
+        from PIL import Image
+
+        # Create 1 healthy green leaf
+        h_arr = np.zeros((120, 120, 3), dtype=np.uint8)
+        h_arr[:, :] = [34, 139, 34]
+        img_healthy = Image.fromarray(h_arr)
+
+        # Create 1 diseased leaf with brown necrosis
+        d_arr = np.zeros((120, 120, 3), dtype=np.uint8)
+        d_arr[:, :] = [34, 139, 34]
+        d_arr[30:90, 30:90] = [139, 69, 19]
+        img_diseased = Image.fromarray(d_arr)
+
+        res = process_leaf_batch([img_healthy, img_diseased])
+        self.assertEqual(res["total_scanned"], 2)
+        self.assertEqual(res["valid_scanned"], 2)
+        self.assertGreaterEqual(res["canopy_health_index"], 0.0)
+        self.assertLessEqual(res["canopy_health_index"], 100.0)
+        self.assertEqual(len(res["items"]), 2)
+        self.assertIn("triage", res["items"][0])
+
+    def test_batch_csv_summary_formatting(self):
+        from utils.batch_scanner import generate_batch_csv_summary
+        mock_batch = {
+            "items": [
+                {
+                    "filename": "leaf_01.jpg",
+                    "crop": "Tomato",
+                    "disease": "Early Blight",
+                    "is_healthy": False,
+                    "confidence": 0.945,
+                    "damage_pct": 18.2,
+                    "lesion_count": 4,
+                    "stage_label": "Grade 2: Moderate",
+                    "triage": "Warning"
+                },
+                {
+                    "filename": "leaf_02.jpg",
+                    "crop": "Apple",
+                    "disease": "Healthy",
+                    "is_healthy": True,
+                    "confidence": 0.991,
+                    "damage_pct": 0.0,
+                    "lesion_count": 0,
+                    "stage_label": "Grade 0: Pristine",
+                    "triage": "Healthy"
+                }
+            ]
+        }
+        csv_out = generate_batch_csv_summary(mock_batch)
+        self.assertTrue(csv_out.startswith("\ufeff"))
+        self.assertIn("Tomato", csv_out)
+        self.assertIn("Early Blight", csv_out)
+        self.assertIn("Warning", csv_out)
+        self.assertIn("Healthy", csv_out)
+
+    def test_parse_crop_and_disease(self):
+        from predict import parse_crop_and_disease
+        crop, disease = parse_crop_and_disease("Apple___Apple_scab")
+        self.assertEqual(crop, "Apple")
+        self.assertEqual(disease, "Apple scab")
+
+        crop, disease = parse_crop_and_disease("Tomato_Early_blight")
+        self.assertEqual(crop, "Tomato")
+        self.assertEqual(disease, "Early blight")
+
+        crop, disease = parse_crop_and_disease("Tomato_healthy")
+        self.assertEqual(crop, "Tomato")
+        self.assertEqual(disease, "Healthy")
+
+
 if __name__ == "__main__":
     unittest.main()
+
