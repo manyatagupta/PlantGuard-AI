@@ -5,6 +5,29 @@ import tensorflow as tf
 from tensorflow.keras.models import Model
 from utils.preprocessing import preprocess_image
 
+def parse_crop_and_disease(class_name: str) -> tuple:
+    """
+    Parses raw dataset class string into user-friendly crop and disease strings.
+    Example: 'Apple___Apple_scab' -> ('Apple', 'Apple Scab')
+    """
+    clean = class_name.replace(" - Copy", "").strip()
+    if "___" in clean:
+        parts = clean.split("___", 1)
+        crop = parts[0].replace("_(maize)", "").replace("__bell", "").replace("_", " ").strip()
+        disease = parts[1].replace("_", " ").strip()
+    elif clean.startswith("Tomato_"):
+        crop = "Tomato"
+        disease = clean[len("Tomato_"):].lstrip("_").replace("_", " ").strip()
+    else:
+        parts = clean.split("_", 1)
+        crop = parts[0]
+        disease = parts[1].replace("_", " ").strip() if len(parts) > 1 else "Unknown"
+        
+    if not disease or disease.lower() == "healthy":
+        disease = "Healthy"
+    return crop, disease
+
+
 class PlantDiseasePredictor:
     def __init__(self, model_path="models/plant_disease_model.keras", class_names_path="models/class_names.txt"):
         self.model_path = model_path
@@ -68,6 +91,10 @@ class PlantDiseasePredictor:
             print(f"Grad-CAM setup note: {e}")
         self.has_gradcam = False
         
+    def is_loaded(self):
+        """Returns True if the neural network model is loaded and ready."""
+        return self.model is not None
+
     def predict(self, image):
         """
         Predicts the disease class of a plant leaf image.
@@ -137,4 +164,3 @@ if __name__ == "__main__":
         print(f"Model loaded successfully. Classes: {predictor.class_names}")
     except FileNotFoundError as e:
         print(e)
-# Minor update for predictor
