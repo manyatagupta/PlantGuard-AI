@@ -123,11 +123,31 @@ class PlantDiseasePredictor:
         # Determine if healthy (assuming 'healthy' is in the class name)
         is_healthy = 'healthy' in predicted_class_name.lower()
         
+        # Parse friendly crop and disease names
+        crop, disease = parse_crop_and_disease(predicted_class_name)
+        
+        # Build all probabilities and top 3 predictions
+        all_probs = {self.class_names[i]: float(predictions[0][i]) for i in range(len(self.class_names))}
+        sorted_classes = sorted(all_probs.items(), key=lambda x: x[1], reverse=True)[:3]
+        top_3 = []
+        for cls_name, cls_conf in sorted_classes:
+            c, d = parse_crop_and_disease(cls_name)
+            top_3.append({
+                "class": cls_name,
+                "confidence": cls_conf,
+                "crop": c,
+                "disease": d
+            })
+        
         return {
             'predicted_class': predicted_class_name,
+            'class': predicted_class_name,
             'confidence': confidence,
             'is_healthy': is_healthy,
-            'all_probabilities': {self.class_names[i]: float(predictions[0][i]) for i in range(len(self.class_names))},
+            'crop': crop,
+            'disease': disease,
+            'top_3': top_3,
+            'all_probabilities': all_probs,
             'heatmap': heatmap
         }
         
