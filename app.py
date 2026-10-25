@@ -28,6 +28,7 @@ from utils.chemical_scanner import lookup_chemical_by_epa_or_name, get_all_chemi
 from utils.nutrient_diagnostics import diagnose_nutrient_deficiency, get_deficiency_vs_disease_comparison, NUTRIENT_DEFICIENCIES
 from utils.export_utils import export_predictions_to_csv_string, generate_field_audit_checklist_html
 from utils.sensor_telemetry import calculate_vpd, evaluate_vpd_disease_hazard, generate_mock_iot_telemetry_stream
+from utils.batch_scanner import process_leaf_batch, generate_batch_csv_summary
 import pydeck as pdk
 import pandas as pd
 import datetime
@@ -277,6 +278,21 @@ st.markdown("""
 def get_disease_info(class_name):
     return get_disease_expert_info(class_name)
 
+class LocalImageFile:
+    def __init__(self, path, name=None):
+        self.path = path
+        self.name = name if name else os.path.basename(path)
+
+# Shared Cached Model Predictor
+@st.cache_resource
+def load_predictor():
+    predictor = PlantDiseasePredictor()
+    try:
+        predictor.load_model()
+        return predictor, None
+    except Exception as e:
+        return None, str(e)
+
 def main():
     # Sidebar
     with st.sidebar:
@@ -292,6 +308,7 @@ def main():
             "Navigation", 
             [
                 "📸 Disease Scanner", 
+                "📦 Multi-Leaf Canopy Batch Scanner",
                 "🔬 Recovery & Healing Tracker",
                 "🧪 Abiotic Nutrient Diagnostic Matrix",
                 "📡 IoT Microclimate & VPD Telemetry",
@@ -319,6 +336,211 @@ def main():
         
         st.markdown("---")
         st.warning("⚠️ **Disclaimer:** This is an educational tool and should not replace professional agricultural advice.")
+
+    # Multi-Leaf Canopy Batch Diagnostic Scanner View
+    if page == "📦 Multi-Leaf Canopy Batch Scanner":
+        st.title("📦 Multi-Leaf Canopy Batch Diagnostic Scanner")
+        st.markdown("### High-throughput foliage batch processor with aggregate canopy health metrics, automated triage, and field inspection export.")
+        st.caption("Quantifies overall Canopy Health Index (CHI), identifies localized disease hotspots across orchard/vineyard rows, and triages critical foliar infections.")
+
+        predictor, error_msg = load_predictor()
+        if error_msg:
+            st.warning(f"⚠️ Predictor model note: {error_msg}. Running with fallback biological rules.")
+
+        col_bctrl1, col_bctrl2 = st.columns([1.8, 2.2])
+        with col_bctrl1:
+            load_batch_demo = st.button("🧪 Load Field Canopy Demo (6 Leaf Scans Across Rows)", use_container_width=True)
+        with col_bctrl2:
+            st.info("💡 Rapidly survey entire tree canopies or crop beds by uploading multiple foliage photos at once.")
+
+        if "batch_files_queue" not in st.session_state:
+            st.session_state["batch_files_queue"] = []
+        if "batch_results" not in st.session_state:
+            st.session_state["batch_results"] = None
+
+        sample_apple = "assets/samples/apple_scab.jpg"
+        sample_healthy = "assets/samples/healthy_leaf.jpg"
+        sample_tomato = "assets/samples/tomato_early_blight.jpg"
+
+        if load_batch_demo:
+            demo_queue = []
+            if os.path.exists(sample_apple):
+                demo_queue.append(LocalImageFile(sample_apple, "Canopy_Row1_SpecimenA_AppleScab.jpg"))
+            if os.path.exists(sample_healthy):
+                demo_queue.append(LocalImageFile(sample_healthy, "Canopy_Row1_SpecimenB_HealthyLeaf.jpg"))
+            if os.path.exists(sample_tomato):
+                demo_queue.append(LocalImageFile(sample_tomato, "Canopy_Row2_SpecimenC_EarlyBlight.jpg"))
+            if os.path.exists(sample_apple):
+                demo_queue.append(LocalImageFile(sample_apple, "Canopy_Row2_SpecimenD_AppleScab.jpg"))
+            if os.path.exists(sample_healthy):
+                demo_queue.append(LocalImageFile(sample_healthy, "Canopy_Row3_SpecimenE_HealthyLeaf.jpg"))
+            if os.path.exists(sample_tomato):
+                demo_queue.append(LocalImageFile(sample_tomato, "Canopy_Row3_SpecimenF_EarlyBlight.jpg"))
+            st.session_state["batch_files_queue"] = demo_queue
+            st.session_state["batch_results"] = None
+            st.toast("Loaded 6 canopy field specimens!")
+
+        up_batch = st.file_uploader(
+            "📁 Select Multiple Leaf Images (JPG, JPEG, PNG):",
+            type=["jpg", "jpeg", "png"],
+            accept_multiple_files=True,
+            key="batch_uploader"
+        )
+        if up_batch:
+            st.session_state["batch_files_queue"] = up_batch
+            st.session_state["batch_results"] = None
+
+        active_batch = st.session_state["batch_files_queue"]
+        if active_batch:
+            st.markdown(f"**Queued Foliage Scans:** `{len(active_batch)} images ready for canopy analysis.`")
+            if st.button("🚀 Execute Canopy Batch Diagnosis", use_container_width=True, type="primary"):
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+
+                def update_progress(pct, msg):
+                    progress_bar.progress(pct)
+                    status_text.text(msg)
+
+                batch_res = process_leaf_batch(active_batch, predictor=predictor, progress_callback=update_progress)
+                st.session_state["batch_results"] = batch_res
+                status_text.empty()
+                progress_bar.empty()
+                st.toast("Batch diagnosis completed successfully! 🎉")
+
+        if st.session_state.get("batch_results"):
+            b_res = st.session_state["batch_results"]
+            chi = b_res["canopy_health_index"]
+            avg_dmg = b_res["average_damage_pct"]
+            healthy_pct = b_res["healthy_percentage"]
+            crit_count = b_res["high_severity_count"]
+
+            if chi >= 75.0:
+                chi_color = "#10b981"
+                chi_badge = "Vigorous / Healthy Canopy"
+            elif chi >= 45.0:
+                chi_color = "#f59e0b"
+                chi_badge = "Moderate Foliar Stress"
+            else:
+                chi_color = "#ef4444"
+                chi_badge = "Severe Canopy Outbreak Threat"
+
+            # CHI Gauge Banner
+            st.markdown(f"""
+            <div class='disease-card' style='border-color: {chi_color}; margin: 24px 0;'>
+                <div style='display: flex; justify-content: space-between; align-items: center;'>
+                    <div>
+                        <h2 style='margin:0; color: #f8fafc;'>Canopy Health Index (CHI)</h2>
+                        <p style='color: #cbd5e1; margin: 6px 0 0 0;'>Composite foliar vigor scoring based on {b_res['total_scanned']} evaluated canopy leaf specimens.</p>
+                    </div>
+                    <div style='text-align: right;'>
+                        <span style='font-size: 3rem; font-weight: 800; color: {chi_color};'>{chi:.1f} / 100</span>
+                        <div style='font-weight: 700; color: {chi_color}; text-transform: uppercase;'>{chi_badge}</div>
+                    </div>
+                </div>
+                <div style='width: 100%; background-color: #334155; border-radius: 999px; height: 12px; margin: 18px 0 6px 0;'>
+                    <div style='background-color: {chi_color}; width: {min(100.0, max(4.0, chi))}%; height: 12px; border-radius: 999px; box-shadow: 0 0 15px {chi_color};'></div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # 4 Summary Metric Cards
+            col_bk1, col_bk2, col_bk3, col_bk4 = st.columns(4)
+            with col_bk1:
+                st.markdown(f"""
+                <div class='metric-card'>
+                    <div class='metric-title'>Total Foliage Scanned</div>
+                    <div class='metric-value' style='font-size: 2.2rem;'>{b_res['total_scanned']} Leaves</div>
+                    <div style='color: #94a3b8; font-size: 0.85rem;'>{b_res['valid_scanned']} Processed</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with col_bk2:
+                st.markdown(f"""
+                <div class='metric-card'>
+                    <div class='metric-title'>Canopy Health Ratio</div>
+                    <div class='metric-value' style='font-size: 2.2rem; color: #34d399;'>{healthy_pct:.1f}%</div>
+                    <div style='color: #94a3b8; font-size: 0.85rem;'>{b_res['healthy_count']} Healthy / {b_res['diseased_count']} Diseased</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with col_bk3:
+                st.markdown(f"""
+                <div class='metric-card'>
+                    <div class='metric-title'>Average Damaged Area</div>
+                    <div class='metric-value' style='font-size: 2.2rem; color: #f59e0b;'>{avg_dmg:.1f}%</div>
+                    <div style='color: #94a3b8; font-size: 0.85rem;'>Foliar Lesion Surface</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with col_bk4:
+                st.markdown(f"""
+                <div class='metric-card'>
+                    <div class='metric-title'>Triage Outbreak Alerts</div>
+                    <div class='metric-value' style='font-size: 2.2rem; color: #ef4444;'>{crit_count}</div>
+                    <div style='color: #94a3b8; font-size: 0.85rem;'>Critical / Warning Leaves</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # Triage Filter Tabs
+            st.markdown("#### 🔍 Triage & Foliar Inspection Gallery")
+            all_items = b_res.get("items", [])
+            crit_items = [it for it in all_items if it.get("triage") == "Critical"]
+            warn_items = [it for it in all_items if it.get("triage") == "Warning"]
+            hlth_items = [it for it in all_items if it.get("triage") == "Healthy"]
+
+            tab_all, tab_crit, tab_warn, tab_hlth = st.tabs([
+                f"📋 All Specimens ({len(all_items)})",
+                f"🚨 Critical ({len(crit_items)})",
+                f"⚠️ Warning ({len(warn_items)})",
+                f"🌱 Healthy ({len(hlth_items)})"
+            ])
+
+            def render_specimen_list(items_list):
+                if not items_list:
+                    st.info("No leaf scans in this triage category.")
+                    return
+                for s_idx, item in enumerate(items_list):
+                    t_col = item.get("triage_color", "#10b981")
+                    with st.expander(f"🍂 **{item.get('filename')}** — {item.get('crop')} {item.get('disease')} | Triage: {item.get('triage')} ({item.get('confidence', 0.0)*100:.1f}%)", expanded=(s_idx == 0)):
+                        col_sp1, col_sp2, col_sp3 = st.columns([1, 1, 1.2])
+                        with col_sp1:
+                            if item.get("image"):
+                                st.image(item["image"], caption="Original Specimen", use_column_width=True)
+                        with col_sp2:
+                            if item.get("mask_overlay"):
+                                st.image(item["mask_overlay"], caption=f"Lesion Mask ({item.get('damage_pct', 0.0):.1f}% Damaged)", use_column_width=True)
+                        with col_sp3:
+                            st.markdown(f"<span style='background:{t_col}22; color:{t_col}; padding:4px 10px; border-radius:8px; font-weight:700; border:1px solid {t_col}66;'>TRIAGE: {item.get('triage', '').upper()}</span>", unsafe_allow_html=True)
+                            st.markdown(f"**Primary Diagnosis:** `{item.get('class', '').replace('_', ' ')}`")
+                            st.markdown(f"**Confidence:** `{item.get('confidence', 0.0)*100:.1f}%`")
+                            st.markdown(f"**Foliar Damage:** `{item.get('damage_pct', 0.0):.1f}%` ({item.get('stage_label', 'N/A')})")
+                            st.markdown(f"**Lesion Clusters:** `{item.get('lesion_count', 0)}`")
+                            if item.get("top_3"):
+                                st.markdown("##### Differential Diagnoses:")
+                                for t3 in item["top_3"]:
+                                    st.write(f"- {t3.get('disease', t3.get('class'))} ({t3.get('confidence', 0.0)*100:.1f}%)")
+
+            with tab_all:
+                render_specimen_list(all_items)
+            with tab_crit:
+                render_specimen_list(crit_items)
+            with tab_warn:
+                render_specimen_list(warn_items)
+            with tab_hlth:
+                render_specimen_list(hlth_items)
+
+            # Export Telemetry CSV
+            st.markdown("<br>", unsafe_allow_html=True)
+            batch_csv_data = generate_batch_csv_summary(b_res)
+            st.download_button(
+                label="📥 Download Canopy Field Inspection Telemetry (RFC-4180 CSV)",
+                data=batch_csv_data.encode("utf-8"),
+                file_name=f'plantguard_canopy_batch_{datetime.datetime.now().strftime("%Y%m%d_%H%M")}.csv',
+                mime='text/csv',
+                use_container_width=True
+            )
+        else:
+            st.info("👆 Upload leaf images or click the 1-Click Field Canopy Demo above to begin batch diagnosis.")
+        return
 
     # Recovery & Healing Tracker View
     if page == "🔬 Recovery & Healing Tracker":
@@ -1294,16 +1516,6 @@ Generated by PlantGuard AI
     st.markdown('<div class="hero-subtitle">Next-Generation Plant Disease Detection powered by Artificial Intelligence.</div>', unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # Model Initialization
-    @st.cache_resource
-    def load_predictor():
-        predictor = PlantDiseasePredictor()
-        try:
-            predictor.load_model()
-            return predictor, None
-        except Exception as e:
-            return None, str(e)
-            
     predictor, error_msg = load_predictor()
 
     if error_msg:
@@ -1313,11 +1525,6 @@ Generated by PlantGuard AI
 
     st.markdown("#### 📷 Input Leaf Image")
     
-    class LocalImageFile:
-        def __init__(self, path):
-            self.path = path
-            self.name = os.path.basename(path)
-            
     images_to_process = []
     
     tab1, tab2, tab3, tab4 = st.tabs(["📁 Upload Image(s)", "📸 Take a Photo", "📂 Local Folder", "🧪 Demo Specimens (1-Click)"])
@@ -1325,6 +1532,8 @@ Generated by PlantGuard AI
     with tab1:
         uploaded_files = st.file_uploader("Choose images...", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
         if uploaded_files:
+            if len(uploaded_files) > 1:
+                st.info("💡 **Canopy Survey Tip:** You uploaded multiple leaves. Try the **📦 Multi-Leaf Canopy Batch Scanner** in the navigation menu for aggregate Canopy Health Index (CHI) scoring and bulk triage export!")
             if len(uploaded_files) > 20:
                 st.warning("⚠️ Large number of files selected! If Chrome freezes, please use the 'Local Folder' tab instead.")
             images_to_process.extend(uploaded_files)
@@ -1528,6 +1737,14 @@ Generated by PlantGuard AI
                                 st.info(f"**Biological Severity Assessment:** {cv_analysis['field_advice']}")
                                 
                             with vtab3:
+                                st.markdown("##### 🔬 Top Differential Diagnoses:")
+                                if results.get("top_3"):
+                                    for t_rank, t_item in enumerate(results["top_3"], 1):
+                                        c_pct = t_item["confidence"] * 100
+                                        t_badge = "🟢 Primary Match" if t_rank == 1 else f"#{t_rank} Differential"
+                                        st.markdown(f"**{t_badge}:** `{t_item.get('crop')} — {t_item.get('disease')}` (**{c_pct:.2f}%**)")
+                                        st.progress(min(1.0, max(0.01, t_item["confidence"])))
+                                st.markdown("<br>", unsafe_allow_html=True)
                                 probs = results['all_probabilities']
                                 df_probs = pd.DataFrame(list(probs.items()), columns=['Disease', 'Probability']).sort_values(by='Probability', ascending=False).head(5)
                                 st.bar_chart(df_probs.set_index('Disease'))
