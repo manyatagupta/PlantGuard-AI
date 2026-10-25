@@ -183,4 +183,34 @@ def process_leaf_batch(
     }
 
 
+def generate_batch_csv_summary(batch_results: Dict[str, Any]) -> str:
+    """
+    Generates an RFC-4180 compliant CSV export containing all leaf batch scans.
+    """
+    output = io.StringIO()
+    # UTF-8 BOM
+    output.write("\ufeff")
+    output.write("Scan ID,Filename,Crop,Pathology,Status,Confidence %,Damage Area %,Lesion Count,Stage Grade,Triage Level\r\n")
+    
+    for idx, item in enumerate(batch_results.get("items", [])):
+        if "error" in item:
+            output.write(f'{idx+1},"{item["filename"]}","N/A","Error: {item["error"]}","Failed",0.0,0.0,0,"Error","Error"\r\n')
+            continue
+            
+        status = "Healthy" if item["is_healthy"] else "Infected"
+        crop = item.get("crop", "Unknown")
+        disease = item.get("disease", "Unknown").replace('"', '""')
+        conf_pct = item.get("confidence", 0.0) * 100
+        damage_pct = item.get("damage_pct", 0.0)
+        lesions = item.get("lesion_count", 0)
+        stage = item.get("stage_label", "N/A").replace('"', '""')
+        triage = item.get("triage", "Unknown")
+        
+        output.write(
+            f'{idx+1},"{item["filename"]}","{crop}","{disease}","{status}",{conf_pct:.2f},{damage_pct:.2f},{lesions},"{stage}","{triage}"\r\n'
+        )
+        
+    return output.getvalue()
+
+
 
