@@ -95,15 +95,16 @@ class PlantDiseasePredictor:
         """Returns True if the neural network model is loaded and ready."""
         return self.model is not None
 
-    def predict(self, image):
+    def predict(self, image, with_gradcam=True):
         """
         Predicts the disease class of a plant leaf image.
         
         Args:
             image: PIL Image or file path.
+            with_gradcam: Whether to compute Grad-CAM attention heatmap (default True).
             
         Returns:
-            dict: Containing 'prediction', 'confidence', 'is_healthy', raw probabilities, and heatmap.
+            dict: Containing 'predicted_class', 'confidence', 'is_healthy', crop, disease, top_3, raw probabilities, and heatmap.
         """
         if self.model is None:
             self.load_model()
@@ -117,8 +118,8 @@ class PlantDiseasePredictor:
         confidence = float(predictions[0][predicted_class_idx])
         predicted_class_name = self.class_names[predicted_class_idx]
         
-        # Generate Grad-CAM heatmap
-        heatmap = self.make_gradcam_heatmap(processed_img, predicted_class_idx)
+        # Generate Grad-CAM heatmap if requested
+        heatmap = self.make_gradcam_heatmap(processed_img, predicted_class_idx) if with_gradcam else None
         
         # Determine if healthy (assuming 'healthy' is in the class name)
         is_healthy = 'healthy' in predicted_class_name.lower()
