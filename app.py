@@ -18,14 +18,20 @@ from utils.weather_risk import (
     fetch_live_weather, calculate_disease_outbreak_risk, WEATHER_PRESETS,
     get_regional_monitoring_stations
 )
-from utils.dosage_calculator import compute_spray_dosage, get_all_products, get_product_details, TREATMENT_DATABASE
+from utils.dosage_calculator import (
+    compute_spray_dosage, get_all_products, get_product_details, 
+    TREATMENT_DATABASE, check_tank_mix_compatibility, get_jar_test_protocol
+)
 from utils.leaf_cv import analyze_leaf_damage
 from utils.agronomy_brain import query_agronomy_brain, SUGGESTED_QUESTIONS
 from utils.crop_calendar import get_crop_calendar, PHENOLOGY_CALENDAR
 from utils.cost_estimator import estimate_treatment_economics, DEFAULT_PRODUCT_PRICING, BENCHMARK_CROP_VALUES
 from utils.recovery_tracker import evaluate_treatment_recovery
 from utils.chemical_scanner import lookup_chemical_by_epa_or_name, get_all_chemical_catalog, get_frac_rotation_guidance
-from utils.nutrient_diagnostics import diagnose_nutrient_deficiency, get_deficiency_vs_disease_comparison, NUTRIENT_DEFICIENCIES
+from utils.nutrient_diagnostics import (
+    diagnose_nutrient_deficiency, get_deficiency_vs_disease_comparison, 
+    NUTRIENT_DEFICIENCIES, calculate_soil_ph_bioavailability
+)
 from utils.export_utils import export_predictions_to_csv_string, generate_field_audit_checklist_html
 from utils.sensor_telemetry import calculate_vpd, evaluate_vpd_disease_hazard, generate_mock_iot_telemetry_stream
 from utils.batch_scanner import process_leaf_batch, generate_batch_csv_summary
@@ -654,56 +660,156 @@ def main():
     # Abiotic Nutrient Diagnostic Matrix View
     if page == "🧪 Abiotic Nutrient Diagnostic Matrix":
         st.title("🧪 Abiotic Plant Nutrient Deficiency & Cross-Diagnostic Matrix")
-        st.markdown("### Distinguish physiological nutrient disorders from biotic fungal, bacterial, and viral foliar diseases.")
-        st.caption("Up to 40% of leaf discolorations are abiotic imbalances (Nitrogen, Potassium, Iron, Calcium, Magnesium) rather than infectious pathogens.")
+        st.markdown("### Distinguish physiological nutrient disorders from biotic foliar pathogens and model root-zone soil pH bioavailability.")
+        st.caption("Up to 40% of foliar discolorations and stunted growth are abiotic nutritional imbalances rather than infectious fungi or bacteria.")
         
-        col_nd1, col_nd2 = st.columns([1, 1], gap="large")
-        with col_nd1:
-            st.markdown("#### 1️⃣ Symptom Observation on Specimen")
-            leaf_loc = st.selectbox(
-                "🌿 Canopy Leaf Position:",
-                [
-                    "Upper young leaves / Shoots (Immobile elements)",
-                    "Lower mature leaves (Mobile elements: N, P, K, Mg)",
-                    "Fruit / Blossom End (Calcium mobility issue)"
-                ]
-            )
-            
-            symptom_choice = st.selectbox(
-                "🔍 Primary Foliar Pattern:",
-                [
-                    "Interveinal chlorosis (veins emerald green, leaf yellow)",
-                    "Marginal scorch / crispy brown leaf edges ('tip burn')",
-                    "Uniform pale yellowing starting from leaf tip",
-                    "Reddish-purple or bronze pigmentation on undersides",
-                    "Distorted, hooked tips with blossom end rot on fruit"
-                ]
-            )
-            
-            st.markdown("---")
-            st.markdown("#### 🔍 Cross-Disease Differential Check")
-            suspected_disease = st.selectbox(
-                "Compare against suspected infectious pathogen:",
-                ["Tomato Early Blight", "Late Blight", "Powdery Mildew", "Fusarium Wilt", "Septoria Leaf Spot"]
-            )
-            comp_diff = get_deficiency_vs_disease_comparison(suspected_disease)
-            st.info(f"**Commonly Mimics:** `{comp_diff['mimicking_nutrient']}`\n\n**Differential Rule:** {comp_diff['differential_rule']}")
+        tab_symp, tab_soil = st.tabs([
+            "🌿 Foliar Symptom & Pathology Differential", 
+            "🧪 Soil pH Bioavailability & Amendment Calculator"
+        ])
+        
+        with tab_symp:
+            col_nd1, col_nd2 = st.columns([1, 1], gap="large")
+            with col_nd1:
+                st.markdown("#### 1️⃣ Symptom Observation on Specimen")
+                leaf_loc = st.selectbox(
+                    "🌿 Canopy Leaf Position:",
+                    [
+                        "Upper young leaves / Shoots (Immobile elements: Fe, Ca, S, Zn, Mn, B)",
+                        "Lower mature leaves (Mobile elements: N, P, K, Mg)",
+                        "Fruit / Blossom End (Calcium & Boron reproductive mobility)"
+                    ]
+                )
+                
+                symptom_choice = st.selectbox(
+                    "🔍 Primary Foliar Pattern:",
+                    [
+                        "Interveinal chlorosis (veins emerald green, leaf blade yellow)",
+                        "Marginal scorch / crispy brown leaf edges ('tip burn')",
+                        "Uniform pale yellowing starting from leaf tip",
+                        "Reddish-purple or bronze pigmentation on undersides",
+                        "Distorted, hooked tips with blossom end rot on fruit",
+                        "Little leaf syndrome with rosetted stunted internodes",
+                        "Checkered interveinal chlorosis with dark necrotic speckles",
+                        "Terminal shoot dieback with thick brittle leaves"
+                    ]
+                )
+                
+                st.markdown("---")
+                st.markdown("#### 🔍 Cross-Disease Differential Check")
+                suspected_disease = st.selectbox(
+                    "Compare against suspected infectious pathogen:",
+                    ["Tomato Early Blight", "Late Blight", "Powdery Mildew", "Fusarium Wilt", "Septoria Leaf Spot", "Tomato Mosaic Virus"]
+                )
+                comp_diff = get_deficiency_vs_disease_comparison(suspected_disease)
+                st.info(f"**Commonly Mimics:** `{comp_diff['mimicking_nutrient']}`\n\n**Differential Rule:** {comp_diff['differential_rule']}")
 
-        with col_nd2:
-            st.markdown("#### 2️⃣ Ranked Nutritional Diagnosis")
-            diagnoses = diagnose_nutrient_deficiency(leaf_loc, symptom_choice)
+            with col_nd2:
+                st.markdown("#### 2️⃣ Ranked Nutritional Diagnosis")
+                diagnoses = diagnose_nutrient_deficiency(leaf_loc, symptom_choice)
+                
+                if diagnoses:
+                    for idx, d in enumerate(diagnoses[:4]):
+                        with st.expander(f"🔬 Rank #{idx+1}: **{d['nutrient']}** — Match: {d['confidence_score']}%", expanded=(idx==0)):
+                            st.markdown(f"**Mobility:** `{d['mobility']}`")
+                            st.markdown(f"**Visual Symptom:** {d['symptoms']}")
+                            st.markdown(f"**Confused with Diseases:** {', '.join(d['confused_with'])}")
+                            st.warning(f"💡 **How to Tell Apart:** {d['differential_rule']}")
+                            st.markdown(f"**🌱 Soil Amendment:** {d['remedy']}")
+                            st.success(f"⚡ **Emergency Foliar Spray:** {d['emergency_spray']}")
+                else:
+                    st.info("Select symptoms on the left to view ranked nutritional diagnoses.")
+
+        with tab_soil:
+            st.markdown("#### 🧪 Root-Zone Soil pH Bioavailability Simulator (Truog Curves)")
+            st.markdown("Soil pH governs root-zone chemical solubility and ion exchange capacity. Model nutrient lockouts and calculate agricultural limestone or elemental sulfur soil amendment requirements.")
             
-            if diagnoses:
-                for idx, d in enumerate(diagnoses[:3]):
-                    with st.expander(f"🔬 Rank #{idx+1}: **{d['nutrient']}** — Confidence: {d['confidence_score']}%", expanded=(idx==0)):
-                        st.markdown(f"**Mobility:** `{d['mobility']}`")
-                        st.markdown(f"**Visual Symptom:** {d['symptoms']}")
-                        st.markdown(f"**Confused with Diseases:** {', '.join(d['confused_with'])}")
-                        st.warning(f"💡 **How to Tell Apart:** {d['differential_rule']}")
-                        st.markdown(f"**🌱 Soil Amendment:** {d['remedy']}")
-                        st.success(f"⚡ **Emergency Foliar Spray:** {d['emergency_spray']}")
-            else:
-                st.info("Select symptoms on the left to view ranked nutritional diagnoses.")
+            col_sp1, col_sp2 = st.columns([1, 1.2], gap="large")
+            with col_sp1:
+                st.markdown("##### 🎛️ Field Soil Parameters")
+                soil_ph_val = st.slider("Soil pH (H₂O saturated paste test):", min_value=4.0, max_value=9.5, value=6.5, step=0.1)
+                
+                soil_tex_choice = st.selectbox(
+                    "Soil Texture / Cation Exchange Capacity (CEC):",
+                    ["Sandy / Coarse (Low CEC)", "Sandy Loam", "Loam / Silt (Standard)", "Clay Loam", "Heavy Clay (High CEC)"],
+                    index=2
+                )
+                tex_key = "Sandy" if "Sandy /" in soil_tex_choice else ("Sandy Loam" if "Sandy Loam" in soil_tex_choice else ("Clay" if "Clay (" in soil_tex_choice else ("Clay Loam" if "Clay Loam" in soil_tex_choice else "Loam")))
+                
+                field_sqft = st.number_input("Target Growing Area (Sq. Feet):", min_value=50.0, max_value=500000.0, value=1000.0, step=100.0)
+                
+                ph_res = calculate_soil_ph_bioavailability(soil_ph_val, tex_key)
+                
+                st.markdown(f"""
+                <div class='disease-card' style='border-color: {ph_res["status_color"]}; margin-top: 15px;'>
+                    <h3 style='margin:0; color:{ph_res["status_color"]};'>{ph_res["status"]}</h3>
+                    <p style='color:#cbd5e1; margin-top: 8px; line-height:1.5;'>{ph_res["action_summary"]}</p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Amendment Dosage Cards
+                if ph_res["lime_lbs_1000sqft"] > 0:
+                    tot_lime = round(ph_res["lime_lbs_1000sqft"] * (field_sqft / 1000.0), 1)
+                    st.markdown(f"""
+                    <div class='metric-card' style='padding: 18px; margin-top: 15px; border-left: 4px solid #f59e0b;'>
+                        <div class='metric-title' style='color:#f59e0b;'>Agricultural Dolomitic Limestone Required</div>
+                        <div class='metric-value' style='font-size: 2rem;'>{tot_lime} lbs</div>
+                        <div style='color:#94a3b8; font-size: 0.88rem; margin-top: 6px;'>
+                            Rate: <strong>{ph_res["lime_lbs_1000sqft"]} lbs / 1,000 sq ft</strong> ({ph_res["lime_kg_ha"]:.0f} kg/ha).<br>
+                            Supplies both <em>Calcium Carbonate</em> and <em>Magnesium Carbonate</em> to neutralize toxic free aluminum (Al³⁺) and restore phosphorus uptake.
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                elif ph_res["sulfur_lbs_1000sqft"] > 0:
+                    tot_sulfur = round(ph_res["sulfur_lbs_1000sqft"] * (field_sqft / 1000.0), 1)
+                    st.markdown(f"""
+                    <div class='metric-card' style='padding: 18px; margin-top: 15px; border-left: 4px solid #ef4444;'>
+                        <div class='metric-title' style='color:#ef4444;'>Elemental Agricultural Sulfur Required</div>
+                        <div class='metric-value' style='font-size: 2rem;'>{tot_sulfur} lbs</div>
+                        <div style='color:#94a3b8; font-size: 0.88rem; margin-top: 6px;'>
+                            Rate: <strong>{ph_res["sulfur_lbs_1000sqft"]} lbs / 1,000 sq ft</strong> ({ph_res["sulfur_kg_ha"]:.0f} kg/ha).<br>
+                            Soil bacteria oxidize sulfur into sulfuric acid to reduce root-zone alkalinity and release precipitated micronutrients.
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div class='metric-card' style='padding: 18px; margin-top: 15px; border-left: 4px solid #10b981;'>
+                        <div class='metric-title' style='color:#10b981;'>Optimal Agronomic Balance</div>
+                        <div class='metric-value' style='font-size: 1.6rem;'>Zero Amendments Needed</div>
+                        <div style='color:#94a3b8; font-size: 0.88rem; margin-top: 6px;'>
+                            Soil pH is in the prime biological window. Maintain organic matter with finished compost and monitor annually.
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            with col_sp2:
+                st.markdown("##### 📊 10-Nutrient Bioavailability & Lockout Status")
+                if ph_res["lockouts"]:
+                    st.error(f"⚠️ **Severe Lockout Hazard (<50% Available):** {', '.join(ph_res['lockouts'])}")
+                
+                for nutr_name, pct in ph_res["bioavailability"].items():
+                    if pct >= 80.0:
+                        bar_color = "#10b981"
+                        status_tag = "Optimal"
+                    elif pct >= 50.0:
+                        bar_color = "#f59e0b"
+                        status_tag = "Reduced"
+                    else:
+                        bar_color = "#ef4444"
+                        status_tag = "Lockout"
+                        
+                    st.markdown(f"""
+                    <div style='margin-bottom: 10px; background: rgba(30, 41, 59, 0.4); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);'>
+                        <div style='display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 4px;'>
+                            <span style='font-weight: 600; color: #f1f5f9;'>{nutr_name}</span>
+                            <span style='color: {bar_color}; font-weight: 700;'>{pct:.1f}% ({status_tag})</span>
+                        </div>
+                        <div style='background: rgba(255,255,255,0.1); height: 7px; border-radius: 4px; overflow: hidden;'>
+                            <div style='background: {bar_color}; width: {pct}%; height: 100%; border-radius: 4px;'></div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
                 
         return
 
@@ -1283,232 +1389,341 @@ def main():
         st.title("⚖️ Precision Spray & Fertilizer Dosage Calculator")
         st.markdown("### Compute exact carrier water volume, chemical/organic concentrate, and tank mixing recipes tailored to your farm.")
         
-        all_prods = get_all_products()
-        
-        col_left, col_right = st.columns([1.1, 1.3], gap="large")
-        
-        with col_left:
-            st.markdown("#### 1️⃣ Plot & Plant Scale")
-            area_unit = st.selectbox(
-                "📐 Select Scaling Method:",
-                ["Garden Bed (Sq. Feet)", "Plant Count (Individual Plants)", "Greenhouse (Sq. Meters)", "Farm Acreage (Acres)"]
-            )
-            
-            # Default scale values
-            if area_unit == "Garden Bed (Sq. Feet)":
-                area_val = st.number_input("Enter Total Canopy Area (Sq. Ft):", min_value=10.0, max_value=50000.0, value=250.0, step=25.0)
-            elif area_unit == "Plant Count (Individual Plants)":
-                area_val = st.number_input("Enter Number of Crop Plants:", min_value=1.0, max_value=5000.0, value=25.0, step=5.0)
-            elif area_unit == "Greenhouse (Sq. Meters)":
-                area_val = st.number_input("Enter Greenhouse Floor Area (m²):", min_value=5.0, max_value=10000.0, value=100.0, step=10.0)
-            else:
-                area_val = st.number_input("Enter Total Farm Acreage (Acres):", min_value=0.1, max_value=500.0, value=1.0, step=0.25)
-                
-            canopy_stage = st.selectbox(
-                "🌿 Canopy Density & Growth Stage:",
-                ["Medium Canopy", "Early Seedlings / Low Canopy", "Dense Fruiting Canopy / Orchard Trees"]
-            )
-            
-            st.markdown("---")
-            st.markdown("#### 2️⃣ Treatment Formulation")
-            
-            type_filter = st.radio(
-                "Category:",
-                ["All Formulations", "Organic Botanicals & Bio-Pesticides", "Conventional / Chemical Protectants", "Foliar Fertilizers & Tonics"],
-                horizontal=True
-            )
-            
-            filtered_prods = []
-            for p_name in all_prods:
-                details = get_product_details(p_name)
-                cat = details.get("type", "")
-                if type_filter == "Organic Botanicals & Bio-Pesticides" and "Organic" not in cat and "Biological" not in cat:
-                    continue
-                if type_filter == "Conventional / Chemical Protectants" and "Chemical" not in cat:
-                    continue
-                if type_filter == "Foliar Fertilizers & Tonics" and "Fertilizer" not in cat and "Mineral" not in cat and "Micronutrient" not in cat:
-                    continue
-                filtered_prods.append(p_name)
-                
-            selected_product = st.selectbox("🧪 Select Product Formulation:", filtered_prods)
-            prod_meta = get_product_details(selected_product)
-            
-            st.info(f"**Target Pathogens & Pests:** {', '.join(prod_meta.get('recommended_for', []))}\n\n**Approved Crops:** {', '.join(prod_meta.get('crops', []))}")
-            
-        with col_right:
-            st.markdown("#### 3️⃣ Tailored Spray Prescription")
-            
-            dosage_res = compute_spray_dosage(
-                product_name=selected_product,
-                area_type=area_unit,
-                area_val=float(area_val),
-                plant_stage=canopy_stage
-            )
-            
-            # Display Quick Metrics
-            col_qm1, col_qm2 = st.columns(2)
-            with col_qm1:
-                st.markdown(f"""
-                <div class='metric-card' style='padding: 20px 15px;'>
-                    <div class='metric-title'>Total Water Carrier</div>
-                    <div class='metric-value' style='font-size: 2.2rem;'>{dosage_res['water_liters']} L</div>
-                    <div style='color: #94a3b8; font-size: 0.9rem; margin-top: 5px;'>approx. <strong>{dosage_res['water_gallons']} US Gallons</strong></div>
-                </div>
-                """, unsafe_allow_html=True)
-            with col_qm2:
-                st.markdown(f"""
-                <div class='metric-card' style='padding: 20px 15px;'>
-                    <div class='metric-title'>Concentrate Amount</div>
-                    <div class='metric-value' style='font-size: 2.2rem;'>{dosage_res['active_amount']} {dosage_res['active_unit']}</div>
-                    <div style='color: #10b981; font-size: 0.95rem; margin-top: 5px; font-weight:600;'>{dosage_res['household_measure']}</div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-            st.markdown("<br>", unsafe_allow_html=True)
-            
-            # Tank Mix Steps
-            with st.container():
-                st.markdown("##### 🧪 WALES Tank Mixing Protocol:")
-                for step in dosage_res["mixing_steps"]:
-                    st.markdown(step)
-                    
-            st.markdown("---")
-            
-            # Safety & Field Application Guidance
-            col_s1, col_s2 = st.columns(2)
-            with col_s1:
-                st.markdown(f"**⏰ Best Application Window:**\n{dosage_res['best_time']}")
-                st.markdown(f"**🦺 Required PPE:**\n{dosage_res['ppe']}")
-            with col_s2:
-                st.markdown(f"**⏳ Pre-Harvest Interval (PHI):** `{dosage_res['phi_days']} Days`")
-                st.markdown(f"**🚫 Re-Entry Interval (REI):** `{dosage_res['rei_hours']} Hours`")
-                
-            # Commercial Treatment Economics & ROI Expander
-            st.markdown("<br>", unsafe_allow_html=True)
-            with st.expander("💰 Commercial Pack Purchasing & ROI Estimator", expanded=True):
-                st.markdown("##### Estimate commercial container purchases, application labor, and financial ROI.")
-                
-                col_ec1, col_ec2 = st.columns(2)
-                with col_ec1:
-                    bench = DEFAULT_PRODUCT_PRICING.get(selected_product, {"pack_size": 1000, "unit": dosage_res['active_unit'], "price": 28.0})
-                    custom_price = st.number_input(
-                        f"Commercial Pack Price ($ USD per {bench['pack_size']}{bench['unit']}):",
-                        min_value=1.0, value=float(bench["price"]), step=2.0
-                    )
-                    labor_rate = st.number_input("Field Sprayer Labor Rate ($ / hour):", min_value=5.0, value=18.0, step=1.0)
-                with col_ec2:
-                    loss_risk = st.slider("Estimated Potential Crop Loss Without Treatment (%):", min_value=5, max_value=85, value=35, step=5)
-                    crop_val_bench = BENCHMARK_CROP_VALUES.get(area_unit, 1.0) * float(area_val)
-                    crop_rev = st.number_input("Estimated Total Harvest Revenue ($ USD):", min_value=0.0, value=float(round(crop_val_bench, 2)), step=50.0)
+        tab_dose, tab_tank = st.tabs([
+            "⚖️ Field Dosage & Economic ROI Estimator", 
+            "🧪 Tank-Mix Incompatibility & Jar Test Simulator"
+        ])
 
-                econ = estimate_treatment_economics(
+        with tab_dose:
+
+            col_left, col_right = st.columns([1.1, 1.3], gap="large")
+
+            with col_left:
+                st.markdown("#### 1️⃣ Plot & Plant Scale")
+                area_unit = st.selectbox(
+                    "📐 Select Scaling Method:",
+                    ["Garden Bed (Sq. Feet)", "Plant Count (Individual Plants)", "Greenhouse (Sq. Meters)", "Farm Acreage (Acres)"]
+                )
+
+                # Default scale values
+                if area_unit == "Garden Bed (Sq. Feet)":
+                    area_val = st.number_input("Enter Total Canopy Area (Sq. Ft):", min_value=10.0, max_value=50000.0, value=250.0, step=25.0)
+                elif area_unit == "Plant Count (Individual Plants)":
+                    area_val = st.number_input("Enter Number of Crop Plants:", min_value=1.0, max_value=5000.0, value=25.0, step=5.0)
+                elif area_unit == "Greenhouse (Sq. Meters)":
+                    area_val = st.number_input("Enter Greenhouse Floor Area (m²):", min_value=5.0, max_value=10000.0, value=100.0, step=10.0)
+                else:
+                    area_val = st.number_input("Enter Total Farm Acreage (Acres):", min_value=0.1, max_value=500.0, value=1.0, step=0.25)
+
+                canopy_stage = st.selectbox(
+                    "🌿 Canopy Density & Growth Stage:",
+                    ["Medium Canopy", "Early Seedlings / Low Canopy", "Dense Fruiting Canopy / Orchard Trees"]
+                )
+
+                st.markdown("---")
+                st.markdown("#### 2️⃣ Treatment Formulation")
+
+                type_filter = st.radio(
+                    "Category:",
+                    ["All Formulations", "Organic Botanicals & Bio-Pesticides", "Conventional / Chemical Protectants", "Foliar Fertilizers & Tonics"],
+                    horizontal=True
+                )
+
+                filtered_prods = []
+                for p_name in all_prods:
+                    details = get_product_details(p_name)
+                    cat = details.get("type", "")
+                    if type_filter == "Organic Botanicals & Bio-Pesticides" and "Organic" not in cat and "Biological" not in cat:
+                        continue
+                    if type_filter == "Conventional / Chemical Protectants" and "Chemical" not in cat:
+                        continue
+                    if type_filter == "Foliar Fertilizers & Tonics" and "Fertilizer" not in cat and "Mineral" not in cat and "Micronutrient" not in cat:
+                        continue
+                    filtered_prods.append(p_name)
+
+                selected_product = st.selectbox("🧪 Select Product Formulation:", filtered_prods)
+                prod_meta = get_product_details(selected_product)
+
+                st.info(f"**Target Pathogens & Pests:** {', '.join(prod_meta.get('recommended_for', []))}\n\n**Approved Crops:** {', '.join(prod_meta.get('crops', []))}")
+
+            with col_right:
+                st.markdown("#### 3️⃣ Tailored Spray Prescription")
+
+                dosage_res = compute_spray_dosage(
                     product_name=selected_product,
-                    active_amount=dosage_res['active_amount'],
-                    active_unit=dosage_res['active_unit'],
                     area_type=area_unit,
                     area_val=float(area_val),
-                    custom_price_per_pack=custom_price,
-                    custom_labor_rate=labor_rate,
-                    crop_value_estimate=crop_rev if crop_rev > 0 else None,
-                    untreated_loss_pct=float(loss_risk)
+                    plant_stage=canopy_stage
+                )
+
+                # Display Quick Metrics
+                col_qm1, col_qm2 = st.columns(2)
+                with col_qm1:
+                    st.markdown(f"""
+                    <div class='metric-card' style='padding: 20px 15px;'>
+                        <div class='metric-title'>Total Water Carrier</div>
+                        <div class='metric-value' style='font-size: 2.2rem;'>{dosage_res['water_liters']} L</div>
+                        <div style='color: #94a3b8; font-size: 0.9rem; margin-top: 5px;'>approx. <strong>{dosage_res['water_gallons']} US Gallons</strong></div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                with col_qm2:
+                    st.markdown(f"""
+                    <div class='metric-card' style='padding: 20px 15px;'>
+                        <div class='metric-title'>Concentrate Amount</div>
+                        <div class='metric-value' style='font-size: 2.2rem;'>{dosage_res['active_amount']} {dosage_res['active_unit']}</div>
+                        <div style='color: #10b981; font-size: 0.95rem; margin-top: 5px; font-weight:600;'>{dosage_res['household_measure']}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                st.markdown("<br>", unsafe_allow_html=True)
+
+                # Tank Mix Steps
+                with st.container():
+                    st.markdown("##### 🧪 WALES Tank Mixing Protocol:")
+                    for step in dosage_res["mixing_steps"]:
+                        st.markdown(step)
+
+                st.markdown("---")
+
+                # Safety & Field Application Guidance
+                col_s1, col_s2 = st.columns(2)
+                with col_s1:
+                    st.markdown(f"**⏰ Best Application Window:**\n{dosage_res['best_time']}")
+                    st.markdown(f"**🦺 Required PPE:**\n{dosage_res['ppe']}")
+                with col_s2:
+                    st.markdown(f"**⏳ Pre-Harvest Interval (PHI):** `{dosage_res['phi_days']} Days`")
+                    st.markdown(f"**🚫 Re-Entry Interval (REI):** `{dosage_res['rei_hours']} Hours`")
+
+                # Commercial Treatment Economics & ROI Expander
+                st.markdown("<br>", unsafe_allow_html=True)
+                with st.expander("💰 Commercial Pack Purchasing & ROI Estimator", expanded=True):
+                    st.markdown("##### Estimate commercial container purchases, application labor, and financial ROI.")
+
+                    col_ec1, col_ec2 = st.columns(2)
+                    with col_ec1:
+                        bench = DEFAULT_PRODUCT_PRICING.get(selected_product, {"pack_size": 1000, "unit": dosage_res['active_unit'], "price": 28.0})
+                        custom_price = st.number_input(
+                            f"Commercial Pack Price ($ USD per {bench['pack_size']}{bench['unit']}):",
+                            min_value=1.0, value=float(bench["price"]), step=2.0
+                        )
+                        labor_rate = st.number_input("Field Sprayer Labor Rate ($ / hour):", min_value=5.0, value=18.0, step=1.0)
+                    with col_ec2:
+                        loss_risk = st.slider("Estimated Potential Crop Loss Without Treatment (%):", min_value=5, max_value=85, value=35, step=5)
+                        crop_val_bench = BENCHMARK_CROP_VALUES.get(area_unit, 1.0) * float(area_val)
+                        crop_rev = st.number_input("Estimated Total Harvest Revenue ($ USD):", min_value=0.0, value=float(round(crop_val_bench, 2)), step=50.0)
+
+                    econ = estimate_treatment_economics(
+                        product_name=selected_product,
+                        active_amount=dosage_res['active_amount'],
+                        active_unit=dosage_res['active_unit'],
+                        area_type=area_unit,
+                        area_val=float(area_val),
+                        custom_price_per_pack=custom_price,
+                        custom_labor_rate=labor_rate,
+                        crop_value_estimate=crop_rev if crop_rev > 0 else None,
+                        untreated_loss_pct=float(loss_risk)
+                    )
+
+                    col_ei1, col_ei2 = st.columns(2)
+                    with col_ei1:
+                        st.markdown(f"""
+                        <div class='metric-card' style='padding: 18px 12px; margin-bottom: 12px;'>
+                            <div class='metric-title'>Containers Needed</div>
+                            <div class='metric-value' style='font-size: 2rem;'>{econ['packs_needed']} <span style='font-size:1.1rem; color:#94a3b8;'>Packs</span></div>
+                            <div style='color: #cbd5e1; font-size: 0.85rem;'>{econ['pack_size']}{econ['pack_unit']} per pack (${econ['total_product_cost']})</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    with col_ei2:
+                        st.markdown(f"""
+                        <div class='metric-card' style='padding: 18px 12px; margin-bottom: 12px;'>
+                            <div class='metric-title'>Labor & Spraying</div>
+                            <div class='metric-value' style='font-size: 2rem;'>${econ['labor_cost']}</div>
+                            <div style='color: #cbd5e1; font-size: 0.85rem;'>approx. {econ['labor_hours']} application hours</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                    st.markdown(f"""
+                    <div style='background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 16px; padding: 18px; margin: 10px 0;'>
+                        <div style='display:flex; justify-content:space-between; align-items:center;'>
+                            <div>
+                                <div style='color: #94a3b8; font-size: 0.9rem; text-transform:uppercase;'>Protected Harvest Value</div>
+                                <div style='color: #34d399; font-size: 1.8rem; font-weight:800;'>${econ['potential_crop_loss']} Saved</div>
+                            </div>
+                            <div style='text-align:right;'>
+                                <div style='color: #94a3b8; font-size: 0.9rem; text-transform:uppercase;'>Treatment ROI</div>
+                                <div style='color: #10b981; font-size: 1.8rem; font-weight:800;'>{econ['roi_ratio']}x Return</div>
+                            </div>
+                        </div>
+                        <div style='margin-top: 10px; color: #cbd5e1; font-size: 0.9rem;'>
+                            Total investment of <strong>${econ['total_investment']}</strong> (product + labor) safeguards <strong>${econ['potential_crop_loss']}</strong> in yield loss, generating <strong>${econ['net_economic_savings']}</strong> in net economic savings.
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                # EPA Chemical Registration & FRAC Code Lookup
+                st.markdown("<br>", unsafe_allow_html=True)
+                with st.expander("🏷️ EPA Chemical Registration & FRAC Resistance Lookup", expanded=False):
+                    st.markdown("##### Verify EPA Registration Number, active ingredient purity, and resistance rotation.")
+                    chem_query = st.text_input("Enter EPA Reg. No (e.g., 100-1098, 70051-107, 4-61, 264-1152) or Trade Name:", value="100-1098")
+                    chem_res = lookup_chemical_by_epa_or_name(chem_query)
+                    if chem_res["match_found"]:
+                        rec = chem_res["record"]
+                        st.success(f"**{rec['trade_name']}** — EPA Reg. No: `{rec['epa_reg_no']}`")
+                        col_ch1, col_ch2 = st.columns(2)
+                        with col_ch1:
+                            st.markdown(f"**Active Ingredient:** {rec['active_ingredient']}")
+                            st.markdown(f"**FRAC Group:** `{rec['frac_group']}`")
+                            st.markdown(f"**Resistance Risk:** `{rec['resistance_risk']}`")
+                            st.markdown(f"**Signal Word:** `{rec['signal_word']}`")
+                        with col_ch2:
+                            st.markdown(f"**Max Applications/Year:** `{rec['max_annual_apps']}`")
+                            st.markdown(f"**Rainfastness:** `{rec['rainfast_hours']} Hours`")
+                            st.markdown(f"**Pollinators / Bees:** {rec['pollinator_safety']}")
+                            st.markdown(f"**Tank Mix Restrictions:** {', '.join(rec['restricted_mixes'])}")
+                        st.info(f"🔄 **Anti-Resistance FRAC Rotation:** Rotate with {', '.join(rec['recommended_rotation'])}")
+                    else:
+                        st.warning(chem_res["message"])
+
+                # Printable Prescription Text Download
+                recipe_text = f"""PLANTGUARD AI - SPRAY & FERTILIZER PRESCRIPTION SHEET
+    =============================================================
+    Date: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M")}
+    Target Crop Scale: {area_val} ({area_unit})
+    Canopy Stage: {canopy_stage}
+
+    PRODUCT PRESCRIPTION:
+    - Product Formulation: {dosage_res['product_name']} ({dosage_res['category']})
+    - Carrier Water Volume: {dosage_res['water_liters']} Liters ({dosage_res['water_gallons']} US Gallons)
+    - Active Product Needed: {dosage_res['active_amount']} {dosage_res['active_unit']} ({dosage_res['household_measure']})
+
+    STEP-BY-STEP TANK MIX PROTOCOL:
+    {chr(10).join(dosage_res['mixing_steps'])}
+
+    SAFETY & COMPLIANCE:
+    - Pre-Harvest Interval (PHI): {dosage_res['phi_days']} Days
+    - Field Re-Entry Interval (REI): {dosage_res['rei_hours']} Hours
+    - Required PPE: {dosage_res['ppe']}
+    - Recommended Window: {dosage_res['best_time']}
+
+    ECONOMIC & TREATMENT BUDGET ESTIMATE:
+    - Commercial Packs Required: {econ['packs_needed']} x {econ['pack_size']}{econ['pack_unit']} (${econ['total_product_cost']})
+    - Application Labor: ~{econ['labor_hours']} hrs (${econ['labor_cost']})
+    - Total Investment: ${econ['total_investment']} (Estimated Saved Crop ROI: {econ['roi_ratio']}x)
+    =============================================================
+    Generated by PlantGuard AI
+    """
+                st.download_button(
+                    label="📄 Download Printable Spray Recipe (.txt)",
+                    data=recipe_text,
+                    file_name=f"PlantGuard_Spray_Recipe_{selected_product.split()[0]}.txt",
+                    mime="text/plain",
+                    use_container_width=True
+                )
+
+        with tab_tank:
+            st.markdown("#### 🧪 Tank-Mix Incompatibility Checker & 1-Pint Jar Test Simulator")
+            st.markdown("Physical precipitation, chemical antagonism, and phytotoxicity can destroy spray rigs and burn entire crops. Verify chemical compatibility and simulate a proportional benchtop jar test before mixing in the field.")
+            
+            col_tm1, col_tm2 = st.columns([1.1, 1.2], gap="large")
+            with col_tm1:
+                st.markdown("##### 1️⃣ Formulation Tank-Mix Selection")
+                
+                # Presets
+                st.markdown("<div style='font-size:0.85rem; color:#94a3b8; margin-bottom:6px;'>Quick Test Scenarios:</div>", unsafe_allow_html=True)
+                col_pr1, col_pr2 = st.columns(2)
+                preset_pick = None
+                with col_pr1:
+                    if st.button("⚠️ Calcium + Epsom Salt", use_container_width=True):
+                        preset_pick = ["Calcium Nitrate", "Epsom Salt (Magnesium Sulfate)"]
+                    if st.button("🚫 Sulfur + Neem Oil", use_container_width=True):
+                        preset_pick = ["Wettable Sulfur (Micronized 80%)", "Neem Oil (Cold-Pressed 70%)"]
+                with col_pr2:
+                    if st.button("🚫 Copper + Bacillus", use_container_width=True):
+                        preset_pick = ["Liquid Copper Fungicide", "Bacillus subtilis Bio-Fungicide"]
+                    if st.button("🟢 Safe: Neem + Bicarb", use_container_width=True):
+                        preset_pick = ["Neem Oil (Cold-Pressed 70%)", "Potassium Bicarbonate"]
+                        
+                if preset_pick:
+                    st.session_state["tank_mix_selection"] = preset_pick
+                    
+                current_selection = st.session_state.get("tank_mix_selection", ["Calcium Nitrate", "Epsom Salt (Magnesium Sulfate)"])
+                current_selection = [p for p in current_selection if p in all_prods]
+                if len(current_selection) < 2:
+                    current_selection = [all_prods[0], all_prods[1]]
+                    
+                selected_mix = st.multiselect(
+                    "Select 2 or more products to test together in tank:",
+                    all_prods,
+                    default=current_selection,
+                    key="tank_mix_multiselect"
                 )
                 
-                col_ei1, col_ei2 = st.columns(2)
-                with col_ei1:
+                if len(selected_mix) >= 2:
+                    compat_res = check_tank_mix_compatibility(selected_mix)
+                    
                     st.markdown(f"""
-                    <div class='metric-card' style='padding: 18px 12px; margin-bottom: 12px;'>
-                        <div class='metric-title'>Containers Needed</div>
-                        <div class='metric-value' style='font-size: 2rem;'>{econ['packs_needed']} <span style='font-size:1.1rem; color:#94a3b8;'>Packs</span></div>
-                        <div style='color: #cbd5e1; font-size: 0.85rem;'>{econ['pack_size']}{econ['pack_unit']} per pack (${econ['total_product_cost']})</div>
+                    <div class='disease-card' style='border-color: {compat_res["badge_color"]}; margin: 15px 0;'>
+                        <div style='display:flex; justify-content:space-between; align-items:center;'>
+                            <h3 style='margin:0; color:{compat_res["badge_color"]};'>{compat_res["status"]}</h3>
+                            <span style='background:{compat_res["badge_color"]}; color:#000; font-weight:800; padding:4px 12px; border-radius:12px; font-size:0.8rem;'>{compat_res["overall_safety"]}</span>
+                        </div>
+                        <p style='color:#cbd5e1; margin-top: 8px; line-height:1.5;'>{compat_res["summary"]}</p>
                     </div>
                     """, unsafe_allow_html=True)
-                with col_ei2:
-                    st.markdown(f"""
-                    <div class='metric-card' style='padding: 18px 12px; margin-bottom: 12px;'>
-                        <div class='metric-title'>Labor & Spraying</div>
-                        <div class='metric-value' style='font-size: 2rem;'>${econ['labor_cost']}</div>
-                        <div style='color: #cbd5e1; font-size: 0.85rem;'>approx. {econ['labor_hours']} application hours</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-                st.markdown(f"""
-                <div style='background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 16px; padding: 18px; margin: 10px 0;'>
-                    <div style='display:flex; justify-content:space-between; align-items:center;'>
-                        <div>
-                            <div style='color: #94a3b8; font-size: 0.9rem; text-transform:uppercase;'>Protected Harvest Value</div>
-                            <div style='color: #34d399; font-size: 1.8rem; font-weight:800;'>${econ['potential_crop_loss']} Saved</div>
-                        </div>
-                        <div style='text-align:right;'>
-                            <div style='color: #94a3b8; font-size: 0.9rem; text-transform:uppercase;'>Treatment ROI</div>
-                            <div style='color: #10b981; font-size: 1.8rem; font-weight:800;'>{econ['roi_ratio']}x Return</div>
-                        </div>
-                    </div>
-                    <div style='margin-top: 10px; color: #cbd5e1; font-size: 0.9rem;'>
-                        Total investment of <strong>${econ['total_investment']}</strong> (product + labor) safeguards <strong>${econ['potential_crop_loss']}</strong> in yield loss, generating <strong>${econ['net_economic_savings']}</strong> in net economic savings.
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-            # EPA Chemical Registration & FRAC Code Lookup
-            st.markdown("<br>", unsafe_allow_html=True)
-            with st.expander("🏷️ EPA Chemical Registration & FRAC Resistance Lookup", expanded=False):
-                st.markdown("##### Verify EPA Registration Number, active ingredient purity, and resistance rotation.")
-                chem_query = st.text_input("Enter EPA Reg. No (e.g., 100-1098, 70051-107, 4-61, 264-1152) or Trade Name:", value="100-1098")
-                chem_res = lookup_chemical_by_epa_or_name(chem_query)
-                if chem_res["match_found"]:
-                    rec = chem_res["record"]
-                    st.success(f"**{rec['trade_name']}** — EPA Reg. No: `{rec['epa_reg_no']}`")
-                    col_ch1, col_ch2 = st.columns(2)
-                    with col_ch1:
-                        st.markdown(f"**Active Ingredient:** {rec['active_ingredient']}")
-                        st.markdown(f"**FRAC Group:** `{rec['frac_group']}`")
-                        st.markdown(f"**Resistance Risk:** `{rec['resistance_risk']}`")
-                        st.markdown(f"**Signal Word:** `{rec['signal_word']}`")
-                    with col_ch2:
-                        st.markdown(f"**Max Applications/Year:** `{rec['max_annual_apps']}`")
-                        st.markdown(f"**Rainfastness:** `{rec['rainfast_hours']} Hours`")
-                        st.markdown(f"**Pollinators / Bees:** {rec['pollinator_safety']}")
-                        st.markdown(f"**Tank Mix Restrictions:** {', '.join(rec['restricted_mixes'])}")
-                    st.info(f"🔄 **Anti-Resistance FRAC Rotation:** Rotate with {', '.join(rec['recommended_rotation'])}")
+                    
+                    if compat_res["conflicts"]:
+                        st.markdown("##### ⚠️ Specific Incompatibility Conflicts:")
+                        for c in compat_res["conflicts"]:
+                            with st.expander(f"🚫 {c['title']} ({c['severity']} Severity)", expanded=True):
+                                st.markdown(f"**Hazard Reaction:** {c['hazard']}")
+                                st.warning(f"💡 **Remedial Action:** {c['action']}")
+                                if c["withholding_days"] > 0:
+                                    st.error(f"⏳ **Mandatory Safe Interval:** Wait minimum `{c['withholding_days']} Days` between applications.")
+                    else:
+                        st.success("✅ **Chemical & Physical Harmony:** No direct chemical precipitation or biological neutralizations known for this combination.")
+                        
+                    # WALES Order for this mix
+                    st.markdown("##### 🔄 Optimal WALES Tank Loading Sequence:")
+                    st.markdown("<p style='font-size:0.85rem; color:#94a3b8;'>Always add products in this precise order with continuous mechanical agitation:</p>", unsafe_allow_html=True)
+                    for idx, prod in enumerate(compat_res["wales_order"]):
+                        st.markdown(f"**{idx+1}. {prod}**")
                 else:
-                    st.warning(chem_res["message"])
+                    st.info("👆 Please select at least 2 products above to analyze tank compatibility.")
 
-            # Printable Prescription Text Download
-            recipe_text = f"""PLANTGUARD AI - SPRAY & FERTILIZER PRESCRIPTION SHEET
-=============================================================
-Date: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M")}
-Target Crop Scale: {area_val} ({area_unit})
-Canopy Stage: {canopy_stage}
-
-PRODUCT PRESCRIPTION:
-- Product Formulation: {dosage_res['product_name']} ({dosage_res['category']})
-- Carrier Water Volume: {dosage_res['water_liters']} Liters ({dosage_res['water_gallons']} US Gallons)
-- Active Product Needed: {dosage_res['active_amount']} {dosage_res['active_unit']} ({dosage_res['household_measure']})
-
-STEP-BY-STEP TANK MIX PROTOCOL:
-{chr(10).join(dosage_res['mixing_steps'])}
-
-SAFETY & COMPLIANCE:
-- Pre-Harvest Interval (PHI): {dosage_res['phi_days']} Days
-- Field Re-Entry Interval (REI): {dosage_res['rei_hours']} Hours
-- Required PPE: {dosage_res['ppe']}
-- Recommended Window: {dosage_res['best_time']}
-
-ECONOMIC & TREATMENT BUDGET ESTIMATE:
-- Commercial Packs Required: {econ['packs_needed']} x {econ['pack_size']}{econ['pack_unit']} (${econ['total_product_cost']})
-- Application Labor: ~{econ['labor_hours']} hrs (${econ['labor_cost']})
-- Total Investment: ${econ['total_investment']} (Estimated Saved Crop ROI: {econ['roi_ratio']}x)
-=============================================================
-Generated by PlantGuard AI
-"""
-            st.download_button(
-                label="📄 Download Printable Spray Recipe (.txt)",
-                data=recipe_text,
-                file_name=f"PlantGuard_Spray_Recipe_{selected_product.split()[0]}.txt",
-                mime="text/plain",
-                use_container_width=True
-            )
-            
+            with col_tm2:
+                st.markdown("##### 2️⃣ 1-Pint (500 ml) Benchtop Mason Jar Test Simulator")
+                st.markdown("Never risk a whole spray tank. Conduct this scaled-down benchtop test to verify physical compatibility with your specific field water.")
+                
+                if len(selected_mix) >= 2:
+                    jar_proto = get_jar_test_protocol(selected_mix)
+                    
+                    st.markdown("###### ⚖️ Proportional Jar Dosages (Scaled to 500 ml Water):")
+                    for d in jar_proto["jar_dosages"]:
+                        st.markdown(f"- **{d['product']}:** `{d['jar_amount']} {d['unit']}` ({d['household_measure']})")
+                        
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    st.markdown("###### 🧪 Jar Test Execution Protocol:")
+                    for s in jar_proto["protocol_steps"]:
+                        st.markdown(s)
+                        
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    col_jp, col_jf = st.columns(2)
+                    with col_jp:
+                        st.markdown(f"""
+                        <div class='metric-card' style='border-left: 4px solid #10b981; padding: 12px;'>
+                            <div style='color: #10b981; font-weight:700; margin-bottom:5px;'>🟢 PASS CRITERIA</div>
+                            <div style='font-size:0.83rem; color:#cbd5e1;'>{jar_proto["evaluation"]["pass_criteria"]}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    with col_jf:
+                        st.markdown(f"""
+                        <div class='metric-card' style='border-left: 4px solid #ef4444; padding: 12px;'>
+                            <div style='color: #ef4444; font-weight:700; margin-bottom:5px;'>🔴 FAIL CRITERIA</div>
+                            <div style='font-size:0.83rem; color:#cbd5e1;'>{jar_proto["evaluation"]["fail_criteria"]}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                else:
+                    st.info("Select 2 or more products on the left to generate the tailored 1-pint jar test formulation.")
         return
 
     # Scanner View Content
