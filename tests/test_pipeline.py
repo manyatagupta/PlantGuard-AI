@@ -239,6 +239,82 @@ class TestNutrientDiagnostics(unittest.TestCase):
         self.assertEqual(comp["mimicking_nutrient"], "Potassium (K)")
         self.assertIn("differential_rule", comp)
 
+    def test_soil_ph_bioavailability_acidic(self):
+        from utils.nutrient_diagnostics import calculate_soil_ph_bioavailability
+        res = calculate_soil_ph_bioavailability(5.2, soil_texture="Loam")
+        self.assertEqual(res["ph"], 5.2)
+        self.assertIn("Acidic Soil Lockout", res["status"])
+        self.assertLess(res["bioavailability"]["Phosphorus (P)"], 60.0)
+        self.assertLess(res["bioavailability"]["Calcium (Ca)"], 60.0)
+        self.assertGreater(res["lime_lbs_1000sqft"], 0.0)
+        self.assertGreater(res["lime_kg_ha"], 0.0)
+        self.assertEqual(res["sulfur_lbs_1000sqft"], 0.0)
+        self.assertIn("Limestone", res["action_summary"])
+
+    def test_soil_ph_bioavailability_alkaline(self):
+        from utils.nutrient_diagnostics import calculate_soil_ph_bioavailability
+        res = calculate_soil_ph_bioavailability(8.0, soil_texture="Clay")
+        self.assertEqual(res["ph"], 8.0)
+        self.assertIn("Alkaline Chlorosis Hazard", res["status"])
+        self.assertLess(res["bioavailability"]["Iron (Fe)"], 35.0)
+        self.assertLess(res["bioavailability"]["Manganese (Mn)"], 35.0)
+        self.assertIn("Iron (Fe)", res["lockouts"])
+        self.assertIn("Manganese (Mn)", res["lockouts"])
+        self.assertGreater(res["sulfur_lbs_1000sqft"], 0.0)
+        self.assertGreater(res["sulfur_kg_ha"], 0.0)
+        self.assertEqual(res["lime_lbs_1000sqft"], 0.0)
+        self.assertIn("Sulfur", res["action_summary"])
+
+    def test_soil_ph_bioavailability_optimal(self):
+        from utils.nutrient_diagnostics import calculate_soil_ph_bioavailability
+        res = calculate_soil_ph_bioavailability(6.5, soil_texture="Sandy Loam")
+        self.assertEqual(res["status"], "Optimal Bioavailability Range")
+        self.assertEqual(len(res["lockouts"]), 0)
+        self.assertEqual(res["lime_lbs_1000sqft"], 0.0)
+        self.assertEqual(res["sulfur_lbs_1000sqft"], 0.0)
+        self.assertGreaterEqual(res["bioavailability"]["Nitrogen (N)"], 90.0)
+        self.assertGreaterEqual(res["bioavailability"]["Phosphorus (P)"], 85.0)
+
+
+class TestTankMixCompatibility(unittest.TestCase):
+    """Tests for spray tank chemical incompatibility detection and jar test simulator."""
+
+    def test_calcium_sulfate_precipitation(self):
+        from utils.dosage_calculator import check_tank_mix_compatibility
+        res = check_tank_mix_compatibility(["Calcium Nitrate", "Epsom Salt (Magnesium Sulfate)"])
+        self.assertIn(res["overall_safety"], ["WARNING", "DANGER"])
+        self.assertGreaterEqual(len(res["conflicts"]), 1)
+        conflict = res["conflicts"][0]
+        self.assertIn("Precipitation", conflict["title"])
+        self.assertIn("Gypsum", conflict["hazard"])
+
+    def test_sulfur_oil_phytotoxicity(self):
+        from utils.dosage_calculator import check_tank_mix_compatibility
+        res = check_tank_mix_compatibility(["Wettable Sulfur (Micronized 80%)", "Neem Oil (Cold-Pressed 70%)"])
+        self.assertEqual(res["overall_safety"], "DANGER")
+        self.assertGreaterEqual(len(res["conflicts"]), 1)
+        conflict = res["conflicts"][0]
+        self.assertIn("Phytotoxicity", conflict["title"])
+        self.assertEqual(conflict["withholding_days"], 30)
+
+    def test_copper_biological_antagonism(self):
+        from utils.dosage_calculator import check_tank_mix_compatibility
+        res = check_tank_mix_compatibility(["Liquid Copper Fungicide", "Bacillus subtilis Bio-Fungicide"])
+        self.assertIn(res["overall_safety"], ["WARNING", "DANGER"])
+        self.assertGreaterEqual(len(res["conflicts"]), 1)
+        conflict = res["conflicts"][0]
+        self.assertIn("Biological", conflict["title"])
+
+    def test_jar_test_protocol_generation(self):
+        from utils.dosage_calculator import get_jar_test_protocol
+        protocol = get_jar_test_protocol(["Liquid Copper Fungicide", "Neem Oil (Cold-Pressed 70%)"])
+        self.assertEqual(protocol["jar_volume_ml"], 500.0)
+        self.assertEqual(len(protocol["jar_dosages"]), 2)
+        self.assertGreaterEqual(len(protocol["protocol_steps"]), 4)
+        self.assertIn("pass_criteria", protocol["evaluation"])
+        self.assertIn("fail_criteria", protocol["evaluation"])
+        self.assertIn("cottage cheese", protocol["evaluation"]["fail_criteria"].lower())
+
 
 class TestExportUtils(unittest.TestCase):
     """Tests for CSV telemetry export and HTML field checklist generation."""
