@@ -14,6 +14,9 @@ SUGGESTED_QUESTIONS = [
     "🥔 How do I tell Late Blight apart from Early Blight?",
     "🧪 Can I mix Copper Fungicide with Neem Oil?",
     "💧 What causes blossom end rot and yellowing leaves?",
+    "🌾 How does soil pH affect nutrient bioavailability and lockout?",
+    "⚗️ Can I mix Calcium Nitrate with Epsom Salt or NPK?",
+    "🧪 How do I perform a 1-pint mason jar compatibility test?",
     "🌽 How do I prevent Common Rust on sweet corn?",
     "⚖️ What is the dosage and dilution rate for Neem Oil?"
 ]
@@ -25,8 +28,18 @@ def query_agronomy_brain(user_query: str) -> str:
     """
     q = user_query.lower().strip()
     
-    # 1. Check for Mixing / Compatibility questions
-    if any(k in q for k in ["mix", "compatible", "tank mix", "combine", "together"]):
+    # 1. Check for Mixing / Compatibility / Jar Test questions
+    if any(k in q for k in ["mix", "compatible", "tank mix", "combine", "together", "jar test", "precipitation", "coagulate"]):
+        if "jar test" in q or "mason jar" in q or "test compatibility" in q:
+            return """### 🧪 The 1-Pint (500 ml) Mason Jar Compatibility Test Protocol
+Before pouring thousands of dollars of crop protection chemicals into a 500-gallon tractor tank, always conduct a benchtop jar test:
+
+1. **Carrier Water:** Add 400 ml of carrier water from your actual spray source to a clean 500 ml glass jar.
+2. **Sequential Dosing (WALES):** Add proportional amounts of each product in sequence (Dry powders $\\to$ Agitation $\\to$ Liquid suspensions $\\to$ Emulsifiable oils $\\to$ Surfactants).
+3. **Inversion & Rest:** Invert 10 times after each product. Top to 500 ml, invert 15 times, and let rest undisturbed for **15-30 minutes**.
+4. **Pass Criteria:** Uniform milky suspension with no clumping or heat release. Any minor settling redisperses with 2 gentle inversions.
+5. **Fail Criteria:** Curdling ("cottage cheese"), oily separation ring at top, gritty heavy sludge at jar bottom, or spontaneous exothermic heating."""
+
         if ("sulfur" in q and "oil" in q) or ("neem" in q and "sulfur" in q):
             return """### 🚫 Critical Phytotoxicity Alert: Sulfur + Oil Incompatibility
 **Under no circumstances should Sulfur be tank-mixed or applied within 30 days of horticultural or Neem oils.**
@@ -34,6 +47,21 @@ def query_agronomy_brain(user_query: str) -> str:
 - **Reaction:** The combination of elemental sulfur and oil penetrates plant epidermal cells, causing severe foliar burn, leaf scorch, and defoliation.
 - **Safety Window:** Maintain a strict minimum **30-day interval** between oil and sulfur applications.
 - **Temperature Guard:** Never apply sulfur when ambient field temperatures exceed **28°C (83°F)**."""
+
+        if ("calcium" in q and ("sulfate" in q or "epsom" in q or "sulfur" in q)) or ("calcium" in q and "phosphate" in q) or ("calcium" in q and "npk" in q):
+            return """### ⚠️ High Chemical Precipitation Hazard: Insoluble Salt Formation
+**Do NOT mix Calcium Nitrate with Phosphates (NPK) or Sulfates (Epsom Salt / Potassium Sulfate) in the same concentrated tank.**
+
+- **Reaction:** Free calcium ions ($Ca^{2+}$) bind instantaneously with sulfate ($SO_4^{2-}$) to form **Gypsum ($CaSO_4$)**, or with phosphates to form insoluble **Dicalcium Phosphate ($CaHPO_4$)**.
+- **Physical Result:** Rapid precipitation of heavy, gritty white sludge that irreversibly clogs nozzle screens and line filters, with zero foliar bioavailability.
+- **Remediation:** Apply Calcium Nitrate separately, or use a two-tank injection system (Tank A: Calcium/Iron; Tank B: Phosphates/Sulfates)."""
+
+        if ("copper" in q and "bacillus" in q) or ("copper" in q and "subtilis" in q) or ("bactericide" in q and "biological" in q):
+            return """### 🚫 Biological Deactivation Hazard: Copper + Bio-Inoculants
+**Do NOT mix Copper Fungicides (Fixed Copper, Copper Octanoate, Bordeaux mixture) with living biological biofungicides (*Bacillus subtilis*, *Trichoderma*).**
+
+- **Reaction:** Copper ions are non-selective broad-spectrum cellular biocides that rupture bacterial cell walls and denature proteins, immediately killing the beneficial living microorganisms upon contact.
+- **Safety Interval:** Apply biologicals at least **7 to 10 days** after a copper treatment has weathered off the canopy foliage."""
 
         if "wales" in q or "order" in q or "sequence" in q:
             return """### 🧪 The Universal WALES Tank Mixing Protocol
@@ -44,6 +72,24 @@ When combining multiple agricultural inputs in a spray tank, always follow the *
 3. **L - Liquid Flowables & Suspensions (SC, F):** Pour liquid concentrates slowly into the swirling tank.
 4. **E - Emulsifiable Concentrates (EC, Neem Oil):** Add oil-based solutions next.
 5. **S - Surfactants, Adjuvants & Water-Soluble Concentrates (SL):** Top off with spreading agents and remaining water carrier."""
+
+    # 2. Check for Soil pH Bioavailability & Nutrient Lockout questions
+    if any(k in q for k in ["soil ph", "ph lockout", "acidic soil", "alkaline soil", "liming", "soil acidity", "truog"]):
+        return """### 🧪 Soil pH Bioavailability Dynamics & Truog Lockout Curves
+Soil pH is the master variable governing root-zone chemical solubility and ion exchange capacity.
+
+#### 1. The Agronomic Sweet Spot (pH 6.2 - 6.8):
+- All 10 macro- and micro-nutrients achieve simultaneous optimal solubility without phytotoxicity.
+
+#### 2. Acidic Soil Lockout (pH < 6.0):
+- **Phosphorus (P) Fixation:** Insoluble aluminum and iron phosphates ($AlPO_4$, $FePO_4$) precipitate out, turning leaves dark dull green or purple.
+- **Base Cation Leaching:** Calcium ($Ca^{2+}$) and Magnesium ($Mg^{2+}$) are displaced by hydrogen and toxic aluminum ($Al^{3+}$) ions.
+- **Remedy:** Broadcast Agricultural Dolomitic Limestone (providing both calcium carbonate and magnesium carbonate) at 20-50 lbs per 1,000 sq. ft. depending on soil texture.
+
+#### 3. Alkaline Soil Lockout (pH > 7.3):
+- **Micronutrient Precipitation:** Iron, Zinc, Manganese, and Boron precipitate into insoluble hydroxides, causing acute interveinal chlorosis (yellow leaves with green veins).
+- **Phosphorus Binding:** Forms insoluble Tricalcium Phosphate ($Ca_3(PO_4)_2$).
+- **Remedy:** Apply Elemental Agricultural Sulfur (10-30 lbs / 1,000 sq ft) or foliar chelated micronutrients (Fe-EDDHA, Zn-EDTA)."""
 
     # 2. Check for Specific Disease Inquiries
     matched_disease = None
