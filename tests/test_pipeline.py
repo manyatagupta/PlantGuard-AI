@@ -441,6 +441,118 @@ class TestBatchScanner(unittest.TestCase):
         self.assertEqual(disease, "Healthy")
 
 
+class TestDewPointAndMultiZoneIoT(unittest.TestCase):
+    """Tests for psychrometric dew point calculation and multi-zone farm spatial modeling."""
+
+    def test_dew_point_psychrometrics(self):
+        from utils.sensor_telemetry import calculate_dew_point, calculate_vpd
+        dp = calculate_dew_point(22.0, 88.0)
+        self.assertAlmostEqual(dp, 19.92, delta=0.5)
+        
+        vpd_res = calculate_vpd(22.0, 88.0)
+        self.assertIn("dew_point_c", vpd_res)
+        self.assertIn("abs_humidity_gm3", vpd_res)
+        self.assertIn("condensation_risk", vpd_res)
+
+    def test_multizone_farm_telemetry(self):
+        from utils.sensor_telemetry import simulate_multizone_farm_telemetry
+        res = simulate_multizone_farm_telemetry()
+        self.assertEqual(res["total_zones"], 4)
+        self.assertIn("zones", res)
+        self.assertGreaterEqual(res["high_risk_zones"], 0)
+        z0 = res["zones"][0]
+        self.assertIn("dew_point_c", z0)
+        self.assertIn("condensation_margin_c", z0)
+
+
+class TestSeasonalFRACRotation(unittest.TestCase):
+    """Tests for multi-season FRAC/IRAC rotation compliance and resistance risk scoring."""
+
+    def test_consecutive_frac_violation(self):
+        from utils.chemical_scanner import evaluate_seasonal_rotation_plan
+        plan = ["Heritage 50 WDG", "Heritage 50 WDG"]
+        res = evaluate_seasonal_rotation_plan(plan)
+        self.assertGreaterEqual(len(res["violations"]), 1)
+        self.assertEqual(res["violations"][0]["type"], "CONSECUTIVE_OVEREXPOSURE")
+        self.assertGreaterEqual(res["score"], 35)
+
+    def test_compliant_rotation(self):
+        from utils.chemical_scanner import evaluate_seasonal_rotation_plan
+        plan = ["Heritage 50 WDG", "Bonide Liquid Copper Octanoate", "Luna Tranquility Fungicide"]
+        res = evaluate_seasonal_rotation_plan(plan)
+        self.assertEqual(len(res["violations"]), 0)
+        self.assertEqual(res["status"], "ANTI-RESISTANCE COMPLIANT")
+        self.assertLessEqual(res["score"], 30)
+
+
+class TestSeasonalSprayBudget(unittest.TestCase):
+    """Tests for multi-treatment seasonal spray budgeting and economics."""
+
+    def test_seasonal_program_calculation(self):
+        from utils.cost_estimator import calculate_seasonal_spray_program_budget
+        res = calculate_seasonal_spray_program_budget(area_type="Farm Acreage (Acres)", area_val=2.0)
+        self.assertGreaterEqual(res["total_applications"], 4)
+        self.assertGreater(res["grand_total_investment"], 0.0)
+        self.assertGreater(res["potential_loss_avoided"], 0.0)
+        self.assertGreaterEqual(res["roi_multiplier"], 1.0)
+        self.assertEqual(len(res["stages"]), 4)
+
+
+class TestDatabaseLotTaggingAndSearch(unittest.TestCase):
+    """Tests for farm zone lot tagging, historical search, and zone health aggregation."""
+
+    def test_lot_tagging_and_search(self):
+        from utils.db import add_prediction, search_prediction_history, get_zone_health_summary
+        add_prediction(
+            filename="lot_leaf_99.jpg",
+            predicted_class="Apple___Apple_scab",
+            confidence=0.98,
+            is_healthy=False,
+            damage_pct=21.0,
+            severity_grade="Grade 3",
+            farm_zone="Zone-C South Orchard",
+            notes="Observed on Gala trees"
+        )
+        matches = search_prediction_history(query="Apple_scab", farm_zone="Zone-C South Orchard")
+        self.assertGreaterEqual(len(matches), 1)
+        top = matches[0]
+        self.assertEqual(top["farm_zone"], "Zone-C South Orchard")
+        self.assertIn("Gala", top["notes"])
+        
+        summary = get_zone_health_summary()
+        self.assertGreater(len(summary), 0)
+        self.assertTrue(any(z["zone"] == "Zone-C South Orchard" for z in summary))
+
+
+class TestDatasetValidationUtility(unittest.TestCase):
+    """Tests for dataset directory integrity verification and corruption scanner."""
+
+    def test_dataset_validation_missing_dir(self):
+        from download_dataset import validate_dataset_integrity
+        res = validate_dataset_integrity("non_existent_folder_xyz_123")
+        self.assertEqual(res["status"], "NOT_FOUND")
+        self.assertEqual(res["classes_found"], 0)
+
+    def test_dataset_validation_synthetic(self):
+        import shutil
+        from download_dataset import validate_dataset_integrity
+        test_dir = "temp_unittest_dataset"
+        class_dir = os.path.join(test_dir, "Tomato___Early_blight")
+        os.makedirs(class_dir, exist_ok=True)
+        try:
+            sample_img = Image.new("RGB", (30, 30), color="green")
+            sample_img.save(os.path.join(class_dir, "sample_leaf.jpg"))
+            
+            res = validate_dataset_integrity(test_dir, verify_images=True)
+            self.assertEqual(res["status"], "VALID")
+            self.assertEqual(res["classes_found"], 1)
+            self.assertEqual(res["total_images"], 1)
+            self.assertEqual(res["corrupted_count"], 0)
+        finally:
+            if os.path.exists(test_dir):
+                shutil.rmtree(test_dir)
+
+
 if __name__ == "__main__":
     unittest.main()
 
