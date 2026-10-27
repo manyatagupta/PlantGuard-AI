@@ -102,3 +102,109 @@ def estimate_treatment_economics(
         "roi_ratio": roi_ratio,
         "loss_pct": untreated_loss_pct
     }
+
+
+def calculate_seasonal_spray_program_budget(
+    treatment_schedule: list = None,
+    area_type: str = "Garden Bed (Sq. Feet)",
+    area_val: float = 250.0,
+    custom_labor_rate: float = 18.0,
+    crop_value_estimate: float = None,
+    untreated_loss_pct: float = 40.0
+) -> dict:
+    """
+    Computes cumulative seasonal budget across multiple phenological treatment stages.
+    """
+    if not treatment_schedule:
+        treatment_schedule = [
+            {"stage": "Dormant / Green Tip", "product": "Copper Octanoate (Liquid Copper Soap)", "sprays": 1},
+            {"stage": "Pink Bud / Pre-Bloom", "product": "Neem Oil (Cold-Pressed 70%)", "sprays": 2},
+            {"stage": "Petal Fall / Early Fruit", "product": "Bacillus subtilis (Biofungicide - Serenade)", "sprays": 2},
+            {"stage": "Mid-Summer Canopy Maintenance", "product": "Potassium Bicarbonate (MilStop / GreenCure)", "sprays": 2}
+        ]
+        
+    stage_breakdowns = []
+    total_chem_cost = 0.0
+    total_labor_hours = 0.0
+    
+    # Estimate water volume per spray pass
+    if "Acre" in area_type:
+        base_liters_per_pass = area_val * 400.0
+    elif "Greenhouse" in area_type:
+        base_liters_per_pass = area_val * 0.15
+    elif "Plant" in area_type:
+        base_liters_per_pass = area_val * 0.5
+    else: # Sq. Feet
+        base_liters_per_pass = (area_val / 250.0) * 15.0
+        
+    for item in treatment_schedule:
+        stg = item.get("stage", "General Application")
+        prod = item.get("product", "Neem Oil (Cold-Pressed 70%)")
+        num_sprays = item.get("sprays", 1)
+        
+        # Approximate rate: 5 ml/L or 3 g/L
+        rate = 5.0
+        active_per_spray = base_liters_per_pass * rate
+        total_active = active_per_spray * num_sprays
+        
+        bench = DEFAULT_PRODUCT_PRICING.get(prod, {"pack_size": 1000, "unit": "ml", "price": 28.00})
+        packs = max(1, math.ceil(total_active / bench["pack_size"]))
+        chem_cost = round(packs * bench["price"], 2)
+        
+        # Labor per pass
+        if "Acre" in area_type:
+            pass_labor = round(max(0.5, area_val * 1.0), 1)
+        elif "Greenhouse" in area_type:
+            pass_labor = round(max(0.3, (area_val / 200.0) * 0.8), 1)
+        elif "Plant" in area_type:
+            pass_labor = round(max(0.2, (area_val / 50.0) * 0.4), 1)
+        else:
+            pass_labor = round(max(0.2, (area_val / 1000.0) * 0.5), 1)
+            
+        stage_labor_hours = pass_labor * num_sprays
+        stage_labor_cost = round(stage_labor_hours * custom_labor_rate, 2)
+        
+        total_chem_cost += chem_cost
+        total_labor_hours += stage_labor_hours
+        
+        stage_breakdowns.append({
+            "stage": stg,
+            "product": prod,
+            "passes": num_sprays,
+            "active_needed": round(total_active, 1),
+            "unit": bench["unit"],
+            "packs": packs,
+            "chemical_cost": chem_cost,
+            "labor_hours": stage_labor_hours,
+            "labor_cost": stage_labor_cost,
+            "stage_total": round(chem_cost + stage_labor_cost, 2)
+        })
+        
+    total_labor_cost = round(total_labor_hours * custom_labor_rate, 2)
+    grand_total_investment = round(total_chem_cost + total_labor_cost, 2)
+    
+    # Crop Valuation
+    if crop_value_estimate is not None and crop_value_estimate > 0:
+        gross_val = crop_value_estimate
+    else:
+        benchmark_rate = BENCHMARK_CROP_VALUES.get(area_type, 1.0)
+        gross_val = round(area_val * benchmark_rate, 2)
+        
+    potential_loss = round(gross_val * (untreated_loss_pct / 100.0), 2)
+    net_savings = round(max(0.0, potential_loss - grand_total_investment), 2)
+    roi_multiplier = round(potential_loss / grand_total_investment, 1) if grand_total_investment > 0 else 1.0
+    
+    return {
+        "area_type": area_type,
+        "area_val": area_val,
+        "stages": stage_breakdowns,
+        "total_applications": sum(s["passes"] for s in stage_breakdowns),
+        "total_chemical_cost": round(total_chem_cost, 2),
+        "total_labor_hours": round(total_labor_hours, 1),
+        "total_labor_cost": total_labor_cost,
+        "grand_total_investment": grand_total_investment,
+        "gross_crop_value": gross_val,
+        "potential_loss_avoided": potential_loss,
+        "net_economic_savings": net_savings,
+        "roi_multiplier": roi_multiplier
+    }
