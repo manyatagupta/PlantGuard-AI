@@ -166,3 +166,117 @@ def get_frac_rotation_guidance(current_frac: str) -> dict:
         "recommended_rotation": ["Rotate with Group M Multi-site protectants"],
         "max_consecutive_sprays": 2
     }
+
+
+def evaluate_seasonal_rotation_plan(applied_products: list) -> dict:
+    """
+    Evaluates a sequence of seasonal fungicide applications for FRAC rotation compliance,
+    consecutive single-site exposure risks, and cumulative pathogen resistance pressure.
+    """
+    if not applied_products:
+        return {
+            "status": "EMPTY_PLAN",
+            "score": 0,
+            "badge_color": "#94a3b8",
+            "total_applications": 0,
+            "distinct_frac_groups": 0,
+            "violations": [],
+            "history": [],
+            "recommendation": "Add applied products to evaluate seasonal rotation."
+        }
+        
+    resolved_history = []
+    frac_counts = {}
+    violations = []
+    
+    prev_frac = None
+    consecutive_count = 0
+    
+    for idx, p_name in enumerate(applied_products):
+        lookup = lookup_chemical_by_epa_or_name(p_name)
+        if lookup["match_found"]:
+            rec = lookup["record"]
+            trade = rec["trade_name"]
+            frac = rec["frac_group"]
+            risk = rec["resistance_risk"]
+            max_app = rec["max_annual_apps"]
+        else:
+            trade = p_name
+            frac = "Unknown Mode of Action"
+            risk = "MEDIUM"
+            max_app = 4
+            
+        frac_counts[frac] = frac_counts.get(frac, 0) + 1
+        
+        # Check consecutive exposure for high-risk single-site chemistries
+        if frac == prev_frac and "Group M" not in frac and "NC" not in frac and "44" not in frac:
+            consecutive_count += 1
+            if consecutive_count >= 2:
+                violations.append({
+                    "spray_index": idx + 1,
+                    "product": trade,
+                    "frac_group": frac,
+                    "type": "CONSECUTIVE_OVEREXPOSURE",
+                    "severity": "CRITICAL",
+                    "description": f"Applied {trade} ({frac}) consecutively {consecutive_count} times. Overexposes target fungi to identical single-site cellular mutation pressures."
+                })
+        else:
+            consecutive_count = 1
+            prev_frac = frac
+            
+        # Check max annual limit
+        if frac_counts[frac] > max_app:
+            violations.append({
+                "spray_index": idx + 1,
+                "product": trade,
+                "frac_group": frac,
+                "type": "ANNUAL_LABEL_EXCEEDED",
+                "severity": "HIGH",
+                "description": f"Exceeded legal annual maximum label applications ({max_app} allowed, {frac_counts[frac]} applied)."
+            })
+            
+        resolved_history.append({
+            "spray_order": idx + 1,
+            "product": trade,
+            "frac_group": frac,
+            "resistance_risk": risk
+        })
+        
+    # Calculate Resistance Score (0 to 100)
+    base_score = 15
+    for v in violations:
+        if v["severity"] == "CRITICAL":
+            base_score += 35
+        elif v["severity"] == "HIGH":
+            base_score += 20
+            
+    # Distinct FRAC bonus
+    distinct_fracs = len(set(h["frac_group"] for h in resolved_history))
+    if distinct_fracs >= 3:
+        base_score = max(5, base_score - 15)
+        
+    resistance_score = min(100, max(5, base_score))
+    
+    if resistance_score >= 60:
+        status = "CRITICAL RESISTANCE RISK"
+        badge_color = "#ef4444"
+        rec_text = "Foliar pathogen population is under severe selective mutation pressure. Immediately switch to multi-site protectants (FRAC Group M01 Copper or M05 Chlorothalonil) or biological biofungicides (Group 44)."
+    elif resistance_score >= 35:
+        status = "MODERATE ROTATION WARNING"
+        badge_color = "#f59e0b"
+        rec_text = "Rotate next application to an unshared biochemical mode of action. Ensure at least one multi-site buffer spray between single-site systemic applications."
+    else:
+        status = "ANTI-RESISTANCE COMPLIANT"
+        badge_color = "#10b981"
+        rec_text = "Excellent mode-of-action stewardship. Your rotation successfully breaks fungal mutation cycles and preserves chemical efficacy."
+        
+    return {
+        "status": status,
+        "score": resistance_score,
+        "badge_color": badge_color,
+        "total_applications": len(applied_products),
+        "distinct_frac_groups": distinct_fracs,
+        "violations": violations,
+        "history": resolved_history,
+        "recommendation": rec_text
+    }
