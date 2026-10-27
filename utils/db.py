@@ -16,7 +16,9 @@ def init_db():
             confidence REAL,
             is_healthy INTEGER,
             damage_pct REAL DEFAULT 0.0,
-            severity_grade TEXT DEFAULT 'N/A'
+            severity_grade TEXT DEFAULT 'N/A',
+            farm_zone TEXT DEFAULT 'General Field',
+            notes TEXT DEFAULT ''
         )
     ''')
     # Migrate if columns don't exist yet
@@ -32,16 +34,26 @@ def init_db():
             c.execute("ALTER TABLE predictions ADD COLUMN severity_grade TEXT DEFAULT 'N/A'")
         except Exception:
             pass
+    if "farm_zone" not in columns:
+        try:
+            c.execute("ALTER TABLE predictions ADD COLUMN farm_zone TEXT DEFAULT 'General Field'")
+        except Exception:
+            pass
+    if "notes" not in columns:
+        try:
+            c.execute("ALTER TABLE predictions ADD COLUMN notes TEXT DEFAULT ''")
+        except Exception:
+            pass
     conn.commit()
     conn.close()
 
-def add_prediction(filename, predicted_class, confidence, is_healthy, damage_pct=0.0, severity_grade="N/A"):
+def add_prediction(filename, predicted_class, confidence, is_healthy, damage_pct=0.0, severity_grade="N/A", farm_zone="General Field", notes=""):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     c.execute(
-        "INSERT INTO predictions (timestamp, filename, predicted_class, confidence, is_healthy, damage_pct, severity_grade) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (timestamp, filename, predicted_class, confidence, int(is_healthy), float(damage_pct), str(severity_grade))
+        "INSERT INTO predictions (timestamp, filename, predicted_class, confidence, is_healthy, damage_pct, severity_grade, farm_zone, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (timestamp, filename, predicted_class, confidence, int(is_healthy), float(damage_pct), str(severity_grade), str(farm_zone), str(notes))
     )
     conn.commit()
     conn.close()
@@ -54,10 +66,13 @@ def clear_prediction_history():
     conn.commit()
     conn.close()
 
-def get_recent_predictions(limit=5):
+def get_recent_predictions(limit=5, farm_zone=None):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute("SELECT timestamp, filename, predicted_class, confidence, is_healthy, damage_pct, severity_grade FROM predictions ORDER BY id DESC LIMIT ?", (limit,))
+    if farm_zone and farm_zone != "All Zones":
+        c.execute("SELECT timestamp, filename, predicted_class, confidence, is_healthy, damage_pct, severity_grade, farm_zone, notes FROM predictions WHERE farm_zone = ? ORDER BY id DESC LIMIT ?", (farm_zone, limit))
+    else:
+        c.execute("SELECT timestamp, filename, predicted_class, confidence, is_healthy, damage_pct, severity_grade, farm_zone, notes FROM predictions ORDER BY id DESC LIMIT ?", (limit,))
     rows = c.fetchall()
     conn.close()
     
@@ -69,7 +84,9 @@ def get_recent_predictions(limit=5):
             "conf": row[3],
             "is_healthy": bool(row[4]),
             "damage_pct": row[5] if len(row) > 5 and row[5] is not None else 0.0,
-            "severity_grade": row[6] if len(row) > 6 and row[6] is not None else "N/A"
+            "severity_grade": row[6] if len(row) > 6 and row[6] is not None else "N/A",
+            "farm_zone": row[7] if len(row) > 7 and row[7] is not None else "General Field",
+            "notes": row[8] if len(row) > 8 and row[8] is not None else ""
         }
         for row in rows
     ]
@@ -115,4 +132,104 @@ def get_all_predictions_df():
     df = pd.read_sql_query("SELECT * FROM predictions ORDER BY id DESC", conn)
     conn.close()
     return df
-# Minor update for database utils
+
+def search_prediction_history(
+    query: str = None, 
+    farm_zone: str = None, 
+    severity_grade: str = None, 
+    is_healthy: bool = None,
+    limit: int = 100
+) -> list:
+    """
+    Performs dynamic multi-parameter search across historical disease records.
+    """
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    
+    sql = "SELECT id, timestamp, filename, predicted_class, confidence, is_healthy, damage_pct, severity_grade, farm_zone, notes FROM predictions WHERE 1=1"
+    params = []
+    
+    if query:
+        sql += " AND (predicted_class LIKE ? OR filename LIKE ? OR notes LIKE ?)"
+        q_wildcard = f"%{query}%"
+        params.extend([q_wildcard, q_wildcard, q_wildcard])
+        
+    if farm_zone and farm_zone != "All Zones":
+        sql += " AND farm_zone = ?"
+        params.append(farm_zone)
+        
+    if severity_grade and severity_grade != "All Grades":
+        sql += " AND severity_grade LIKE ?"
+        params.append(f"%{severity_grade}%")
+        
+    if is_healthy is not None:
+        sql += " AND is_healthy = ?"
+        params.append(1 if is_healthy else 0)
+        
+    sql += " ORDER BY id DESC LIMIT ?"
+    params.append(limit)
+    
+    c.execute(sql, tuple(params))
+    rows = c.fetchall()
+    conn.close()
+    
+    return [
+        {
+            "id": r[0],
+            "timestamp": r[1],
+            "filename": r[2],
+            "class": r[3],
+            "conf": r[4],
+            "is_healthy": bool(r[5]),
+            "damage_pct": r[6] if len(r) > 6 and r[6] is not None else 0.0,
+            "severity_grade": r[7] if len(r) > 7 and r[7] is not None else "N/A",
+            "farm_zone": r[8] if len(r) > 8 and r[8] is not None else "General Field",
+            "notes": r[9] if len(r) > 9 and r[9] is not None else ""
+        }
+        for r in rows
+    ]
+
+def get_zone_health_summary() -> list:
+    """
+    Computes aggregated health diagnostics grouped by farm lot/zone.
+    """
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("""
+        SELECT 
+            farm_zone, 
+            COUNT(*) as total_scans,
+            SUM(is_healthy) as healthy_scans,
+            AVG(damage_pct) as avg_damage
+        FROM predictions 
+        GROUP BY farm_zone
+        ORDER BY total_scans DESC
+    """)
+    rows = c.fetchall()
+    conn.close()
+    
+    summary = []
+    for r in rows:
+        zone = r[0] if r[0] else "General Field"
+        total = r[1]
+        healthy = r[2] if r[2] is not None else 0
+        diseased = total - healthy
+        avg_dmg = round(r[3], 1) if r[3] is not None else 0.0
+        health_idx = round((healthy / total) * 100.0, 1) if total > 0 else 100.0
+        summary.append({
+            "zone": zone,
+            "total_scans": total,
+            "healthy": healthy,
+            "diseased": diseased,
+            "health_index": health_idx,
+            "avg_damage_pct": avg_dmg
+        })
+    return summary
+
+def export_history_json() -> str:
+    """
+    Serializes historical prediction records into JSON string for backup and data portability.
+    """
+    import json
+    records = get_recent_predictions(limit=1000)
+    return json.dumps(records, indent=2)
