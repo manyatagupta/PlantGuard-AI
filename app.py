@@ -10,7 +10,8 @@ from predict import PlantDiseasePredictor
 from utils.db import (
     add_prediction, get_recent_predictions, get_summary_stats, 
     get_disease_distribution, get_daily_trends, get_all_predictions_df,
-    clear_prediction_history
+    clear_prediction_history, search_prediction_history, get_zone_health_summary,
+    export_history_json
 )
 from utils.pdf_generator import generate_pdf_report
 from utils.disease_expert import get_disease_expert_info, get_all_disease_guides
@@ -25,15 +26,24 @@ from utils.dosage_calculator import (
 from utils.leaf_cv import analyze_leaf_damage
 from utils.agronomy_brain import query_agronomy_brain, SUGGESTED_QUESTIONS
 from utils.crop_calendar import get_crop_calendar, PHENOLOGY_CALENDAR
-from utils.cost_estimator import estimate_treatment_economics, DEFAULT_PRODUCT_PRICING, BENCHMARK_CROP_VALUES
+from utils.cost_estimator import (
+    estimate_treatment_economics, DEFAULT_PRODUCT_PRICING, BENCHMARK_CROP_VALUES,
+    calculate_seasonal_spray_program_budget
+)
 from utils.recovery_tracker import evaluate_treatment_recovery
-from utils.chemical_scanner import lookup_chemical_by_epa_or_name, get_all_chemical_catalog, get_frac_rotation_guidance
+from utils.chemical_scanner import (
+    lookup_chemical_by_epa_or_name, get_all_chemical_catalog, get_frac_rotation_guidance,
+    evaluate_seasonal_rotation_plan
+)
 from utils.nutrient_diagnostics import (
     diagnose_nutrient_deficiency, get_deficiency_vs_disease_comparison, 
     NUTRIENT_DEFICIENCIES, calculate_soil_ph_bioavailability
 )
 from utils.export_utils import export_predictions_to_csv_string, generate_field_audit_checklist_html
-from utils.sensor_telemetry import calculate_vpd, evaluate_vpd_disease_hazard, generate_mock_iot_telemetry_stream
+from utils.sensor_telemetry import (
+    calculate_vpd, evaluate_vpd_disease_hazard, generate_mock_iot_telemetry_stream,
+    simulate_multizone_farm_telemetry, calculate_dew_point, calculate_absolute_humidity
+)
 from utils.batch_scanner import process_leaf_batch, generate_batch_csv_summary
 import pydeck as pdk
 import pandas as pd
@@ -819,45 +829,102 @@ def main():
         st.markdown("### Psychrometric Vapor Pressure Deficit (VPD) modeling and farm sensor node telemetry.")
         st.caption("Low VPD (<0.4 kPa) creates stagnant moisture films that trigger exponential fungal zoospore germination.")
         
-        col_vpd1, col_vpd2 = st.columns([1, 1], gap="large")
-        with col_vpd1:
-            st.markdown("#### 🎛️ Live Sensor Calibration")
-            t_input = st.slider("Ambient Canopy Temperature (°C):", min_value=10.0, max_value=45.0, value=22.0, step=0.5)
-            rh_input = st.slider("Relative Canopy Humidity (%):", min_value=20.0, max_value=100.0, value=88.0, step=1.0)
+        tab_iot1, tab_iot2 = st.tabs([
+            "🎛️ Single Sensor Calibration & LoRaWAN Stream", 
+            "🗺️ Multi-Zone Farm Spatial Grid & Dew Point Simulator"
+        ])
+        
+        with tab_iot1:
+            col_vpd1, col_vpd2 = st.columns([1, 1], gap="large")
+            with col_vpd1:
+                st.markdown("#### 🎛️ Live Sensor Calibration")
+                t_input = st.slider("Ambient Canopy Temperature (°C):", min_value=10.0, max_value=45.0, value=22.0, step=0.5)
+                rh_input = st.slider("Relative Canopy Humidity (%):", min_value=20.0, max_value=100.0, value=88.0, step=1.0)
+                
+                vpd_data = calculate_vpd(t_input, rh_input)
+                hazard_info = evaluate_vpd_disease_hazard(vpd_data["vpd_kpa"])
+                
+                st.markdown(f"""
+                <div class='disease-card' style='border-color: {hazard_info["hazard_color"]}; margin: 20px 0;'>
+                    <div style='display:flex; justify-content:space-between; align-items:center;'>
+                        <div>
+                            <h3 style='margin:0; color:{hazard_info["hazard_color"]};'>{hazard_info["hazard_badge"]}</h3>
+                            <p style='color:#cbd5e1; margin:6px 0 0 0;'>{hazard_info["summary"]}</p>
+                        </div>
+                        <div style='text-align:right;'>
+                            <span style='font-size:2.8rem; font-weight:800; color:{hazard_info["hazard_color"]};'>{vpd_data["vpd_kpa"]}</span>
+                            <div style='color:#94a3b8; font-weight:600;'>kPa VPD</div>
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                col_psi1, col_psi2 = st.columns(2)
+                with col_psi1:
+                    st.metric("Thermodynamic Dew Point", f"{vpd_data['dew_point_c']} °C", delta=f"{vpd_data['condensation_margin_c']} °C Margin")
+                with col_psi2:
+                    st.metric("Absolute Humidity", f"{vpd_data['abs_humidity_gm3']} g/m³", delta="Condensing!" if vpd_data['condensation_risk'] else "Safe", delta_color="inverse" if vpd_data['condensation_risk'] else "normal")
+                
+                if vpd_data['condensation_risk']:
+                    st.error("🚨 **Foliar Condensation Alert:** Leaf temperature is within 1.8°C of dew point. Free water droplets are condensing on leaf tissue.")
+                
+                st.warning(f"🚨 **High-Risk Fungal Pathogens:** {', '.join(hazard_info['target_pathogens'])}")
+                st.info(f"⚙️ **Automated Actuator / Field Action:** {hazard_info['field_action']}")
+                
+            with col_vpd2:
+                st.markdown("#### 📈 8-Hour LoRaWAN Sensor Node Stream")
+                st.caption("Node #04 — South Greenhouse / Valley Block 2")
+                stream_data = generate_mock_iot_telemetry_stream(hours=8)
+                df_stream = pd.DataFrame(stream_data).set_index("timestamp")
+                
+                st.line_chart(df_stream[["vpd_kpa", "temperature_c", "humidity_pct"]])
+                st.markdown("##### 📡 Latest Probe Sensor Telemetry")
+                st.dataframe(df_stream[["temperature_c", "humidity_pct", "soil_moisture_pct", "vpd_kpa", "hazard_level"]].rename(
+                    columns={"temperature_c": "Temp (°C)", "humidity_pct": "Humidity (%)", "soil_moisture_pct": "Soil Moisture (%)", "vpd_kpa": "VPD (kPa)", "hazard_level": "Status"}
+                ), use_container_width=True)
+                
+        with tab_iot2:
+            st.markdown("#### 🗺️ Multi-Zone Farm Microclimate Spatial Grid")
+            st.markdown("Real-time telemetry across 4 distinct horticultural zones. Identifies microclimate pockets where free leaf condensation accelerates fungal infection.")
             
-            vpd_data = calculate_vpd(t_input, rh_input)
-            hazard_info = evaluate_vpd_disease_hazard(vpd_data["vpd_kpa"])
+            multizone = simulate_multizone_farm_telemetry()
             
             st.markdown(f"""
-            <div class='disease-card' style='border-color: {hazard_info["hazard_color"]}; margin: 20px 0;'>
+            <div class='disease-card' style='border-color: {multizone["farm_status_color"]}; margin-bottom: 20px;'>
                 <div style='display:flex; justify-content:space-between; align-items:center;'>
                     <div>
-                        <h3 style='margin:0; color:{hazard_info["hazard_color"]};'>{hazard_info["hazard_badge"]}</h3>
-                        <p style='color:#cbd5e1; margin:6px 0 0 0;'>{hazard_info["summary"]}</p>
+                        <h3 style='margin:0; color:{multizone["farm_status_color"]};'>Farm Executive Status: {multizone["farm_status"]}</h3>
+                        <p style='color:#cbd5e1; margin-top:5px;'>High-Risk Disease Microclimates: <strong>{multizone["high_risk_zones"]} of {multizone["total_zones"]} Zones</strong></p>
                     </div>
-                    <div style='text-align:right;'>
-                        <span style='font-size:2.8rem; font-weight:800; color:{hazard_info["hazard_color"]};'>{vpd_data["vpd_kpa"]}</span>
-                        <div style='color:#94a3b8; font-weight:600;'>kPa VPD</div>
-                    </div>
+                    <span style='background:{multizone["farm_status_color"]}; color:#000; font-weight:800; padding:6px 14px; border-radius:12px;'>SYNCED AT {multizone["timestamp"].split()[-1]}</span>
                 </div>
             </div>
             """, unsafe_allow_html=True)
             
-            st.error(f"🚨 **High-Risk Fungal Pathogens:** {', '.join(hazard_info['target_pathogens'])}")
-            st.info(f"⚙️ **Automated Actuator / Field Action:** {hazard_info['field_action']}")
-            
-        with col_vpd2:
-            st.markdown("#### 📈 8-Hour LoRaWAN Sensor Node Stream")
-            st.caption("Node #04 — South Greenhouse / Valley Block 2")
-            stream_data = generate_mock_iot_telemetry_stream(hours=8)
-            df_stream = pd.DataFrame(stream_data).set_index("timestamp")
-            
-            st.line_chart(df_stream[["vpd_kpa", "temperature_c", "humidity_pct"]])
-            st.markdown("##### 📡 Latest Probe Sensor Telemetry")
-            st.dataframe(df_stream[["temperature_c", "humidity_pct", "soil_moisture_pct", "vpd_kpa", "hazard_level"]].rename(
-                columns={"temperature_c": "Temp (°C)", "humidity_pct": "Humidity (%)", "soil_moisture_pct": "Soil Moisture (%)", "vpd_kpa": "VPD (kPa)", "hazard_level": "Status"}
-            ), use_container_width=True)
-            
+            z_col1, z_col2 = st.columns(2)
+            for idx, z in enumerate(multizone["zones"]):
+                target_col = z_col1 if idx % 2 == 0 else z_col2
+                with target_col:
+                    border_c = "#ef4444" if z["condensation_risk"] else ("#f59e0b" if "ELEVATED" in z["hazard_level"] else "#10b981")
+                    st.markdown(f"""
+                    <div class='metric-card' style='padding: 18px; margin-bottom: 15px; border-left: 5px solid {border_c};'>
+                        <div style='display:flex; justify-content:space-between;'>
+                            <strong style='font-size:1.1rem; color:#f1f5f9;'>{z["zone_name"]}</strong>
+                            <span style='background:rgba(255,255,255,0.1); padding:2px 8px; border-radius:6px; font-size:0.75rem;'>{z["crop"]}</span>
+                        </div>
+                        <div style='display:flex; gap: 15px; margin-top:10px;'>
+                            <div>Temp: <strong>{z["temp_c"]}°C</strong></div>
+                            <div>Humidity: <strong>{z["humidity_pct"]}%</strong></div>
+                            <div>VPD: <strong style='color:{border_c};'>{z["vpd_kpa"]} kPa</strong></div>
+                        </div>
+                        <div style='margin-top:8px; font-size:0.85rem; color:#94a3b8;'>
+                            Dew Point: <strong>{z["dew_point_c"]}°C</strong> (Margin: <strong>{z["condensation_margin_c"]}°C</strong>) | Abs Humidity: <strong>{z["abs_humidity_gm3"]} g/m³</strong>
+                        </div>
+                        <div style='margin-top:10px; font-size:0.88rem; color:#f8fafc;'>
+                            <strong>Actuator Action:</strong> {z["action"]}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
         return
 
     # Seasonal Spray Calendar View
@@ -951,17 +1018,33 @@ def main():
                 st.info("No trend data available yet.")
                 
         st.markdown("---")
+        st.markdown("#### 🌾 Farm Lot & Zone Health Matrix")
+        zone_summary = get_zone_health_summary()
+        if zone_summary:
+            df_zones = pd.DataFrame(zone_summary).rename(columns={
+                "zone": "Farm Zone / Field Block",
+                "total_scans": "Total Scans",
+                "healthy": "Healthy Plants",
+                "diseased": "Diseased Plants",
+                "health_index": "Health Index (%)",
+                "avg_damage_pct": "Avg Damage Area (%)"
+            })
+            st.dataframe(df_zones, use_container_width=True)
+        else:
+            st.info("No farm zone scans recorded yet.")
+
+        st.markdown("---")
         st.markdown("#### 🗄️ Raw Data Export & History Management")
         
         st.dataframe(df_all, use_container_width=True)
         
-        col_dl, col_chk, col_clr = st.columns([1.5, 1.5, 1])
+        col_dl, col_chk, col_json, col_clr = st.columns([1.2, 1.2, 1.2, 1])
         with col_dl:
             if not df_all.empty:
                 recent_recs = get_recent_predictions(limit=1000)
                 csv_rfc = export_predictions_to_csv_string(recent_recs)
                 st.download_button(
-                    label="📥 Download RFC-4180 Excel CSV",
+                    label="📥 Download RFC CSV",
                     data=csv_rfc.encode("utf-8"),
                     file_name=f'plantguard_telemetry_{datetime.datetime.now().strftime("%Y%m%d")}.csv',
                     mime='text/csv',
@@ -970,14 +1053,23 @@ def main():
         with col_chk:
             checklist_html = generate_field_audit_checklist_html()
             st.download_button(
-                label="📋 Print Field Scouting Sheet (.html)",
+                label="📋 Print Field Sheet",
                 data=checklist_html,
                 file_name=f'plantguard_field_scouting_sheet_{datetime.datetime.now().strftime("%Y%m%d")}.html',
                 mime='text/html',
                 use_container_width=True
             )
+        with col_json:
+            json_export = export_history_json()
+            st.download_button(
+                label="📦 Backup (.json)",
+                data=json_export,
+                file_name=f'plantguard_backup_{datetime.datetime.now().strftime("%Y%m%d")}.json',
+                mime='application/json',
+                use_container_width=True
+            )
         with col_clr:
-            with st.expander("🗑️ Reset Database History"):
+            with st.expander("🗑️ Reset DB"):
                 st.warning("This will erase all past scans from the local database.")
                 if st.button("Confirm Reset History", type="secondary", use_container_width=True):
                     clear_prediction_history()
@@ -1583,6 +1675,31 @@ def main():
                         st.info(f"🔄 **Anti-Resistance FRAC Rotation:** Rotate with {', '.join(rec['recommended_rotation'])}")
                     else:
                         st.warning(chem_res["message"])
+
+                    st.markdown("---")
+                    st.markdown("##### 🔄 Multi-Season FRAC Anti-Resistance Rotation Planner")
+                    st.caption("Enter the sequence of fungicides applied this season to audit your resistance risk and prevent pathogen immunity.")
+                    all_epa_names = [item['trade_name'] for item in get_all_chemical_catalog()]
+                    rotation_seq = st.multiselect(
+                        "Season Application Sequence (in order):",
+                        all_epa_names,
+                        default=["Heritage 50 WDG", "Luna Tranquility Fungicide"],
+                        key="seasonal_frac_rotation_select"
+                    )
+                    if rotation_seq:
+                        rot_audit = evaluate_seasonal_rotation_plan(rotation_seq)
+                        st.markdown(f"""
+                        <div class='disease-card' style='border-color: {rot_audit["badge_color"]}; margin: 12px 0;'>
+                            <div style='display:flex; justify-content:space-between; align-items:center;'>
+                                <strong style='color:{rot_audit["badge_color"]}; font-size:1.1rem;'>{rot_audit["status"]}</strong>
+                                <span style='background:{rot_audit["badge_color"]}; color:#000; font-weight:800; padding:3px 10px; border-radius:10px;'>Resistance Risk: {rot_audit["score"]}/100</span>
+                            </div>
+                            <p style='color:#cbd5e1; margin-top:8px;'>{rot_audit["recommendation"]}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        if rot_audit["violations"]:
+                            for viol in rot_audit["violations"]:
+                                st.error(f"Violation: {viol['description']}")
 
                 # Printable Prescription Text Download
                 recipe_text = f"""PLANTGUARD AI - SPRAY & FERTILIZER PRESCRIPTION SHEET
