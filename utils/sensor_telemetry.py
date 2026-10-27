@@ -7,10 +7,34 @@ germination risk and process greenhouse/field IoT sensor streams.
 import math
 import datetime
 
+def calculate_dew_point(temp_c: float, relative_humidity: float) -> float:
+    """
+    Computes the thermodynamic Dew Point temperature (in °C) using the Magnus-Tetens formula.
+    Dew point is the temperature at which air moisture reaches 100% saturation and condenses.
+    """
+    rh_clamped = min(100.0, max(1.0, relative_humidity))
+    a = 17.27
+    b = 237.7
+    alpha = ((a * temp_c) / (b + temp_c)) + math.log(rh_clamped / 100.0)
+    dew_point = (b * alpha) / (a - alpha)
+    return round(dew_point, 2)
+
+
+def calculate_absolute_humidity(temp_c: float, relative_humidity: float) -> float:
+    """
+    Computes volumetric Absolute Humidity in grams of water vapor per cubic meter of air (g/m³).
+    """
+    rh_clamped = min(100.0, max(0.0, relative_humidity))
+    vp_sat_pa = 610.78 * math.exp((17.27 * temp_c) / (temp_c + 237.3))
+    vp_act_pa = vp_sat_pa * (rh_clamped / 100.0)
+    abs_humidity = (2.1674 * vp_act_pa) / (temp_c + 273.15)
+    return round(abs_humidity, 2)
+
+
 def calculate_vpd(temp_c: float, relative_humidity: float) -> dict:
     """
     Computes Saturated Vapor Pressure (VPsat), Actual Vapor Pressure (VPact),
-    and Vapor Pressure Deficit (VPD in kPa) using the Tetens psychrometric equation.
+    Vapor Pressure Deficit (VPD in kPa), Dew Point, and Condensation Hazard.
     """
     # Tetens formula for saturation vapor pressure over water (in kPa)
     vp_sat = 0.61078 * math.exp((17.27 * temp_c) / (temp_c + 237.3))
@@ -21,13 +45,23 @@ def calculate_vpd(temp_c: float, relative_humidity: float) -> dict:
     
     # Vapor Pressure Deficit
     vpd = max(0.0, vp_sat - vp_act)
+    dew_point = calculate_dew_point(temp_c, rh_clamped)
+    abs_humidity = calculate_absolute_humidity(temp_c, rh_clamped)
+    
+    # Condensation Margin (°C until foliar condensation)
+    condensation_margin = round(temp_c - dew_point, 2)
+    condensation_risk = condensation_margin <= 1.8
     
     return {
         "temp_c": round(temp_c, 1),
         "humidity": round(rh_clamped, 1),
         "vp_sat": round(vp_sat, 3),
         "vp_act": round(vp_act, 3),
-        "vpd_kpa": round(vpd, 2)
+        "vpd_kpa": round(vpd, 2),
+        "dew_point_c": dew_point,
+        "abs_humidity_gm3": abs_humidity,
+        "condensation_margin_c": condensation_margin,
+        "condensation_risk": condensation_risk
     }
 
 def evaluate_vpd_disease_hazard(vpd_kpa: float, hours_in_danger_zone: float = 4.0) -> dict:
@@ -118,3 +152,90 @@ def generate_mock_iot_telemetry_stream(node_name: str = "Node #04 - South Greenh
         })
         
     return readings
+
+
+def simulate_multizone_farm_telemetry() -> dict:
+    """
+    Simulates multi-sensor spatial microclimates across distinct agricultural zones.
+    Computes dew point margin, psychrometric condensation risk, and zone-level hazard.
+    """
+    zones = [
+        {
+            "zone_id": "ZONE-A",
+            "zone_name": "Closed Polyhouse (Propagation)",
+            "crop_type": "Tomato Seedlings",
+            "temp_c": 19.0,
+            "humidity_pct": 92.0,
+            "soil_moisture_pct": 42.0,
+            "light_lux": 15000
+        },
+        {
+            "zone_id": "ZONE-B",
+            "zone_name": "High-Tunnel Hydroponics",
+            "crop_type": "Bell Pepper & Eggplant",
+            "temp_c": 24.5,
+            "humidity_pct": 74.0,
+            "soil_moisture_pct": 34.0,
+            "light_lux": 32000
+        },
+        {
+            "zone_id": "ZONE-C",
+            "zone_name": "South Orchard Canopy",
+            "crop_type": "Honeycrisp Apple Trees",
+            "temp_c": 21.0,
+            "humidity_pct": 65.0,
+            "soil_moisture_pct": 28.0,
+            "light_lux": 48000
+        },
+        {
+            "zone_id": "ZONE-D",
+            "zone_name": "Open Field West",
+            "crop_type": "Sweet Corn & Potatoes",
+            "temp_c": 27.5,
+            "humidity_pct": 46.0,
+            "soil_moisture_pct": 22.0,
+            "light_lux": 65000
+        }
+    ]
+    
+    zone_results = []
+    high_risk_count = 0
+    
+    for z in zones:
+        vpd_data = calculate_vpd(z["temp_c"], z["humidity_pct"])
+        hazard = evaluate_vpd_disease_hazard(vpd_data["vpd_kpa"])
+        
+        is_critical = vpd_data["condensation_risk"] or "CRITICAL" in hazard["hazard_level"]
+        if is_critical:
+            high_risk_count += 1
+            
+        zone_results.append({
+            "zone_id": z["zone_id"],
+            "zone_name": z["zone_name"],
+            "crop": z["crop_type"],
+            "temp_c": z["temp_c"],
+            "humidity_pct": z["humidity_pct"],
+            "dew_point_c": vpd_data["dew_point_c"],
+            "condensation_margin_c": vpd_data["condensation_margin_c"],
+            "condensation_risk": vpd_data["condensation_risk"],
+            "vpd_kpa": vpd_data["vpd_kpa"],
+            "abs_humidity_gm3": vpd_data["abs_humidity_gm3"],
+            "soil_moisture_pct": z["soil_moisture_pct"],
+            "light_lux": z["light_lux"],
+            "hazard_level": hazard["hazard_level"],
+            "hazard_color": hazard["hazard_color"],
+            "hazard_badge": hazard["hazard_badge"],
+            "action": hazard["field_action"]
+        })
+        
+    farm_status = "CRITICAL ALERT" if high_risk_count >= 2 else ("ELEVATED RISK" if high_risk_count == 1 else "STABLE / RESILIENT")
+    farm_status_color = "#ef4444" if high_risk_count >= 2 else ("#f59e0b" if high_risk_count == 1 else "#10b981")
+    
+    return {
+        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "total_zones": len(zones),
+        "high_risk_zones": high_risk_count,
+        "farm_status": farm_status,
+        "farm_status_color": farm_status_color,
+        "zones": zone_results
+    }
