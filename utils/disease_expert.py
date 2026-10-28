@@ -725,3 +725,492 @@ def get_disease_expert_info(class_name: str) -> dict:
 def get_all_disease_guides() -> dict:
     """Returns the entire encyclopedia of disease and care guides organized by crop."""
     return DISEASE_DATABASE
+
+
+# =====================================================================
+# Crop Pathology Vector, Incubation & Host Susceptibility Database
+# =====================================================================
+
+DISEASE_EPIDEMIOLOGY_DATABASE = {
+    "Apple___Apple_scab": {
+        "title": "Apple Scab (Venturia inaequalis)",
+        "crop": "Apple",
+        "pathogen_type": "Fungus (Ascomycete)",
+        "incubation_days_min": 8,
+        "incubation_days_max": 14,
+        "primary_vectors": ["Wind-borne ascospores", "Rain splash", "Air currents"],
+        "vector_carrier_insects": ["None (Primarily meteorological dispersal)"],
+        "vector_categories": ["Wind", "Rain Splash"],
+        "host_susceptibility_stage": "Green tip through petal fall (young expanding leaves & sepals)",
+        "secondary_spread_rate": "Exponential (Polycyclic conidia repeat every 7-10 days under wet canopy)",
+        "environmental_drivers": "Prolonged leaf wetness (> 6-9 hrs) at 13-24°C (55-75°F)",
+        "quarantine_measures": [
+            "Flail mow or shred fallen autumn leaves to eliminate perithecia overwintering sites.",
+            "Apply 5% agricultural urea foliar spray at leaf drop to accelerate leaf decomposition.",
+            "Maintain wide pruning spacing for rapid canopy wind drying."
+        ]
+    },
+    "Apple___Black_rot": {
+        "title": "Black Rot & Frogeye Leaf Spot (Botryosphaeria obtusa)",
+        "crop": "Apple",
+        "pathogen_type": "Fungus",
+        "incubation_days_min": 7,
+        "incubation_days_max": 15,
+        "primary_vectors": ["Rain splash", "Insect feeding wounds", "Pruning tool contact", "Wind"],
+        "vector_carrier_insects": ["Plum curculio (creates fruit entry wounds)", "Tarnished plant bug"],
+        "vector_categories": ["Rain Splash", "Insects", "Pruning Tools", "Wind"],
+        "host_susceptibility_stage": "Petal fall through mid-summer fruit sizing; wounded shoots",
+        "secondary_spread_rate": "Moderate (Pycnidiospores wash down into fruit clusters)",
+        "environmental_drivers": "Warm wet spells (20-27°C / 68-80°F) accompanied by 6+ hours of free water",
+        "quarantine_measures": [
+            "Prune dead brush and mummified fruit; burn or bury infected wood.",
+            "Disinfect pruning shears between tree cuts with 70% isopropyl alcohol.",
+            "Control puncture-feeding insect pests early in season."
+        ]
+    },
+    "Apple___Cedar_apple_rust": {
+        "title": "Cedar Apple Rust (Gymnosporangium juniperi-virginianae)",
+        "crop": "Apple",
+        "pathogen_type": "Heteroecious Rust Fungus",
+        "incubation_days_min": 10,
+        "incubation_days_max": 21,
+        "primary_vectors": ["Wind-borne basidiospores (from Eastern Red Cedar)", "Wind-borne aeciospores"],
+        "vector_carrier_insects": ["None (Obligate airborne heteroecious cycle)"],
+        "vector_categories": ["Wind"],
+        "host_susceptibility_stage": "Pink bud through 3 weeks post-bloom (young leaf tissue < 8 days old)",
+        "secondary_spread_rate": "Low (Monocyclic on apple; cannot spread apple-to-apple)",
+        "environmental_drivers": "Wet spring rains causing cedar gall gel-horn eruption; 10-24°C (50-75°F)",
+        "quarantine_measures": [
+            "Eradicate Eastern Red Cedar (Juniperus virginiana) within 1-2 mile buffer perimeter if feasible.",
+            "Prune gelatinous orange galls off adjacent landscape junipers before spring rains.",
+            "Apply DMI or multi-site protective barrier during cedar spore dispersal window."
+        ]
+    },
+    "Corn_(maize)___Cercospora_leaf_spot Gray_leaf_spot": {
+        "title": "Gray Leaf Spot (Cercospora zeae-maydis)",
+        "crop": "Corn (Maize)",
+        "pathogen_type": "Fungus",
+        "incubation_days_min": 12,
+        "incubation_days_max": 21,
+        "primary_vectors": ["Wind-blown air currents", "Rain splash from crop residue", "Conservation tillage debris"],
+        "vector_carrier_insects": ["None"],
+        "vector_categories": ["Wind", "Rain Splash", "Soil/Debris"],
+        "host_susceptibility_stage": "Tasseling (VT) through grain fill (R3 Milk stage)",
+        "secondary_spread_rate": "Rapid (Polycyclic under continuous high humidity)",
+        "environmental_drivers": "Relative humidity > 90% for 12+ consecutive hours; warm days (24-30°C / 75-86°F)",
+        "quarantine_measures": [
+            "Rotate out of corn for 1-2 seasons to deplete surface stalk residue.",
+            "Till or incorporate crop debris into soil where microbial activity degrades inoculum.",
+            "Select high-tolerance hybrid genetics with strong stay-green characteristics."
+        ]
+    },
+    "Corn_(maize)___Common_rust_": {
+        "title": "Common Rust (Puccinia sorghi)",
+        "crop": "Corn (Maize)",
+        "pathogen_type": "Obligate Rust Fungus",
+        "incubation_days_min": 7,
+        "incubation_days_max": 10,
+        "primary_vectors": ["High-altitude wind currents", "Storm fronts originating from southern latitudes"],
+        "vector_carrier_insects": ["None"],
+        "vector_categories": ["Wind"],
+        "host_susceptibility_stage": "Whorl through silking and pollination",
+        "secondary_spread_rate": "Rapid (Prolific urediniospore production re-infects every 7 days)",
+        "environmental_drivers": "Cool to moderate temperatures (16-24°C / 60-75°F) with heavy overnight dew",
+        "quarantine_measures": [
+            "Scout upper leaves in late vegetative stage (V8 to VT); apply fungicide if pustules exceed 5% leaf area.",
+            "Plant resistant sweet corn and field corn hybrids possessing Rp single-gene resistance."
+        ]
+    },
+    "Corn_(maize)___Northern_Leaf_Blight": {
+        "title": "Northern Corn Leaf Blight (Exserohilum turcicum)",
+        "crop": "Corn (Maize)",
+        "pathogen_type": "Fungus",
+        "incubation_days_min": 7,
+        "incubation_days_max": 14,
+        "primary_vectors": ["Wind-blown conidia", "Rain splash from residue", "Machinery across un-sanitized fields"],
+        "vector_carrier_insects": ["None"],
+        "vector_categories": ["Wind", "Rain Splash", "Farm Machinery"],
+        "host_susceptibility_stage": "Silking to dough stage (severe loss when infection reaches ear leaf prior to pollination)",
+        "secondary_spread_rate": "Rapid (Polycyclic cigar-shaped lesions produce secondary conidia)",
+        "environmental_drivers": "Moderate temperatures (18-27°C / 65-80°F) and 6-12 hours of leaf moisture",
+        "quarantine_measures": [
+            "Deep tillage of infected stubble post-harvest.",
+            "Two-year rotation with non-grass crops (Soybean, Alfalfa).",
+            "Fungicide intervention prior to tassel emergence if lower canopy is symptomatic."
+        ]
+    },
+    "Grape___Black_rot": {
+        "title": "Grape Black Rot (Guignardia bidwellii)",
+        "crop": "Grape",
+        "pathogen_type": "Fungus",
+        "incubation_days_min": 10,
+        "incubation_days_max": 18,
+        "primary_vectors": ["Rain splash", "Wind-blown ascospores", "Overwintering mummified clusters in canopy"],
+        "vector_carrier_insects": ["None direct; occasional berry moth wound opportunistic"],
+        "vector_categories": ["Rain Splash", "Wind", "Mummified Fruit"],
+        "host_susceptibility_stage": "Bud break through 4-5 weeks post-bloom (young green berries most vulnerable)",
+        "secondary_spread_rate": "Exponential (Conidia erupt from pycnidia across infected shoots and berries)",
+        "environmental_drivers": "Temperatures 21-27°C (70-80°F) with 7+ hours of continuous leaf wetness",
+        "quarantine_measures": [
+            "Drop and destroy all dried mummies from trellis wires during dormant winter pruning.",
+            "Canopy management: Shoot-positioning and leaf-pulling around fruiting zone for sunlight exposure.",
+            "Protective sprays starting at 1-3 inch shoot growth."
+        ]
+    },
+    "Grape___Esca_(Black_Measles)": {
+        "title": "Esca Complex & Black Measles",
+        "crop": "Grape",
+        "pathogen_type": "Fungal Wood Canker Complex (Phaeomoniella, Phaeoacremonium)",
+        "incubation_days_min": 180,
+        "incubation_days_max": 730,
+        "primary_vectors": ["Pruning wound entry", "Airborne spores during winter rain", "Contaminated nursery propagation stock"],
+        "vector_carrier_insects": ["Wood-boring beetles (minor mechanical entry)"],
+        "vector_categories": ["Pruning Tools", "Wind", "Nursery Stock"],
+        "host_susceptibility_stage": "Mature vines (> 5-7 years); fresh pruning wounds during winter dormancy",
+        "secondary_spread_rate": "Low to Slow (Multi-year chronic vascular colonization)",
+        "environmental_drivers": "Pruning in wet rainy winter periods; extreme summer heat triggering apoplexy stroke",
+        "quarantine_measures": [
+            "Delay pruning until late winter (just before bud break) when wounds heal faster.",
+            "Paint all large wood pruning cuts with sealant containing fungicide or biocontrol trichoderma.",
+            "Rogue and incinerate severely stunted dying vines."
+        ]
+    },
+    "Grape___Leaf_blight_(Isariopsis_Leaf_Spot)": {
+        "title": "Grape Leaf Blight (Pseudocercospora vitis)",
+        "crop": "Grape",
+        "pathogen_type": "Fungus",
+        "incubation_days_min": 10,
+        "incubation_days_max": 16,
+        "primary_vectors": ["Rain splash", "Air currents", "Overwintering leaf debris"],
+        "vector_carrier_insects": ["None"],
+        "vector_categories": ["Rain Splash", "Wind", "Soil/Debris"],
+        "host_susceptibility_stage": "Mid to late summer canopy maturity (post-veraison)",
+        "secondary_spread_rate": "Moderate (Foliar lesions spread across lower vine layers)",
+        "environmental_drivers": "High relative humidity and temperatures above 24°C (75°F)",
+        "quarantine_measures": [
+            "Rake and bury fallen autumn foliage.",
+            "Maintain fungicide coverage during warm rainy post-veraison spells."
+        ]
+    },
+    "Pepper,_bell___Bacterial_spot": {
+        "title": "Bacterial Spot (Xanthomonas euvesicatoria)",
+        "crop": "Bell Pepper",
+        "pathogen_type": "Bacterium",
+        "incubation_days_min": 5,
+        "incubation_days_max": 10,
+        "primary_vectors": ["Rain splash", "Overhead irrigation", "Contaminated seed lots", "Pruning tools and worker hands"],
+        "vector_carrier_insects": ["None direct; leaf abrasions from strong winds or insects facilitate entry"],
+        "vector_categories": ["Rain Splash", "Irrigation", "Seed Borne", "Pruning Tools", "Worker Hands"],
+        "host_susceptibility_stage": "All vegetative and fruiting stages; especially warm wet transplant establishment",
+        "secondary_spread_rate": "Exponential (Billions of bacteria multiply rapidly in guttation droplets)",
+        "environmental_drivers": "Warm temperatures (24-30°C / 75-86°F) and free water on leaves for > 2 hours",
+        "quarantine_measures": [
+            "Hot water seed treatment (50°C for 25 minutes) or use certified disease-free seed.",
+            "Strictly avoid working in pepper rows when foliage is wet from morning dew or rain.",
+            "Sterilize greenhouse transplant trays and shears with 10% bleach solution."
+        ]
+    },
+    "Potato___Early_blight": {
+        "title": "Potato Early Blight (Alternaria solani)",
+        "crop": "Potato",
+        "pathogen_type": "Fungus",
+        "incubation_days_min": 3,
+        "incubation_days_max": 7,
+        "primary_vectors": ["Wind-borne spores", "Rain splash", "Flea beetles (feeding injury vectors)", "Soil crop debris"],
+        "vector_carrier_insects": ["Epitrix cucumeris (Potato flea beetle - feeding wounds provide entry points)"],
+        "vector_categories": ["Wind", "Rain Splash", "Insects", "Soil/Debris"],
+        "host_susceptibility_stage": "Tuber bulking and canopy maturity (older stressed lower leaves)",
+        "secondary_spread_rate": "Rapid (Conidia form rapidly during alternating dry-wet diurnal cycles)",
+        "environmental_drivers": "Alternating wet and dry periods; temperatures 24-29°C (75-85°F)",
+        "quarantine_measures": [
+            "Maintain optimal plant nitrogen and potassium nutrition to delay physiological senescence.",
+            "Control flea beetle populations during emergence.",
+            "Avoid planting adjacent to older solanaceous fields."
+        ]
+    },
+    "Potato___Late_blight": {
+        "title": "Potato Late Blight (Phytophthora infestans)",
+        "crop": "Potato",
+        "pathogen_type": "Oomycete (Water Mold)",
+        "incubation_days_min": 3,
+        "incubation_days_max": 5,
+        "primary_vectors": ["Airborne sporangia (traveling up to 10+ miles on wind)", "Driving rain storms", "Infected seed tubers", "Cull piles"],
+        "vector_carrier_insects": ["None (Ultra-virulent wind-borne dispersal)"],
+        "vector_categories": ["Wind", "Rain Splash", "Seed Borne", "Cull Piles"],
+        "host_susceptibility_stage": "All growth stages; especially dense canopy prior to row closure and tuber bulking",
+        "secondary_spread_rate": "Catastrophic Exponential (Can devastate an entire field in 7-10 days)",
+        "environmental_drivers": "Cool humid weather (15-21°C / 60-70°F) with relative humidity > 90% and rain",
+        "quarantine_measures": [
+            "Destroy all volunteer potatoes and cull piles; never leave culled tubers exposed to open air.",
+            "Plant only certified disease-free seed tubers.",
+            "Kill vines completely 2-3 weeks before harvest to prevent tuber rot during digging."
+        ]
+    },
+    "Tomato___Bacterial_spot": {
+        "title": "Bacterial Spot (Xanthomonas spp.)",
+        "crop": "Tomato",
+        "pathogen_type": "Bacterium",
+        "incubation_days_min": 5,
+        "incubation_days_max": 10,
+        "primary_vectors": ["Wind-driven rain", "Aerosolized droplets", "Overhead irrigation", "Contaminated seed", "Pruning shears"],
+        "vector_carrier_insects": ["Thrips or beetles (indirect mechanical transmission via feeding wounds)"],
+        "vector_categories": ["Rain Splash", "Wind", "Irrigation", "Seed Borne", "Pruning Tools"],
+        "host_susceptibility_stage": "Transplant stage through flowering and green fruit sizing",
+        "secondary_spread_rate": "Exponential (Explosive multiplication in stomata and foliar hydathodes)",
+        "environmental_drivers": "High temperatures (24-30°C / 75-86°F) and frequent rainfall or overhead sprinkling",
+        "quarantine_measures": [
+            "Use certified pathogen-tested seed or treat with hydrochloric acid or hot water.",
+            "Switch immediately to subterranean drip irrigation.",
+            "Disinfect stakes, trellises, and greenhouse benches between seasons."
+        ]
+    },
+    "Tomato___Early_blight": {
+        "title": "Tomato Early Blight (Alternaria linariae / solani)",
+        "crop": "Tomato",
+        "pathogen_type": "Fungus",
+        "incubation_days_min": 4,
+        "incubation_days_max": 8,
+        "primary_vectors": ["Wind currents", "Rain splash from soil", "Flea beetles", "Infected tomato transplant stock"],
+        "vector_carrier_insects": ["Epitrix spp. (Flea beetles)"],
+        "vector_categories": ["Wind", "Rain Splash", "Insects", "Soil/Debris"],
+        "host_susceptibility_stage": "Heavy fruit load stage (plant energy diverted to fruit weakens lower foliage)",
+        "secondary_spread_rate": "Rapid (Secondary conidiophores form concentric bullseye rings)",
+        "environmental_drivers": "Warm temperatures (24-29°C / 75-85°F) with heavy dew or frequent rains",
+        "quarantine_measures": [
+            "Mulch bed with organic straw or plastic barrier to prevent soil splash onto lower foliage.",
+            "Prune bottom 12-18 inches of foliage (suckers and leaves) once plant reaches 3 feet height.",
+            "Implement a 3-year crop rotation away from solanaceae."
+        ]
+    },
+    "Tomato___Late_blight": {
+        "title": "Tomato Late Blight (Phytophthora infestans)",
+        "crop": "Tomato",
+        "pathogen_type": "Oomycete",
+        "incubation_days_min": 3,
+        "incubation_days_max": 5,
+        "primary_vectors": ["Long-distance wind currents", "Storm cloud fronts", "Infected potato volunteers nearby"],
+        "vector_carrier_insects": ["None"],
+        "vector_categories": ["Wind", "Rain Splash", "Nearby Culled Plants"],
+        "host_susceptibility_stage": "Any stage, especially mid-to-late summer canopies with heavy foliage",
+        "secondary_spread_rate": "Catastrophic Exponential (Millions of sporangia per lesion released into breeze)",
+        "environmental_drivers": "Cool wet conditions (15-21°C / 60-70°F) with extended leaf wetness (> 8 hrs)",
+        "quarantine_measures": [
+            "Inspect garden weekly; immediately rogue out and bag severely infected plants in sealed plastic.",
+            "Do not compost late-blight infected vines in home compost piles.",
+            "Space plants generously (24-36 inches) on tall sturdy stakes for cross-breeze drying."
+        ]
+    },
+    "Tomato___Leaf_Mold": {
+        "title": "Tomato Leaf Mold (Passalora fulva / Cladosporium)",
+        "crop": "Tomato",
+        "pathogen_type": "Fungus",
+        "incubation_days_min": 10,
+        "incubation_days_max": 14,
+        "primary_vectors": ["Air currents in high-tunnel greenhouses", "Worker clothing and hands", "Water condensation drip"],
+        "vector_carrier_insects": ["None"],
+        "vector_categories": ["Wind", "Greenhouse Air Currents", "Worker Hands/Clothing"],
+        "host_susceptibility_stage": "Flowering through fruit harvesting in protected culture/greenhouses",
+        "secondary_spread_rate": "Rapid (Velvety olive-brown spore masses on leaflet undersides)",
+        "environmental_drivers": "High relative humidity (> 85%) and warm temperatures (21-24°C / 70-75°F)",
+        "quarantine_measures": [
+            "Increase greenhouse ventilation with exhaust fans and horizontal airflow (HAF).",
+            "Heat and vent before sunset to prevent condensation on foliage overnight.",
+            "Disinfect greenhouse structural posts and ground covers between crop cycles."
+        ]
+    },
+    "Tomato___Septoria_leaf_spot": {
+        "title": "Septoria Leaf Spot (Septoria lycopersici)",
+        "crop": "Tomato",
+        "pathogen_type": "Fungus",
+        "incubation_days_min": 6,
+        "incubation_days_max": 10,
+        "primary_vectors": ["Rain splash from soil", "Overhead irrigation", "Worker hands and cultivating tools"],
+        "vector_carrier_insects": ["Colorado potato beetle (mechanical spore carrier on body)"],
+        "vector_categories": ["Rain Splash", "Irrigation", "Worker Hands", "Tools", "Insects"],
+        "host_susceptibility_stage": "First fruit set onward (starts at ground-level foliage and climbs upward)",
+        "secondary_spread_rate": "Rapid (Pycnidiospores ooze in gelatinous tendrils during rain)",
+        "environmental_drivers": "Extended wet weather (20-25°C / 68-77°F) with high humidity",
+        "quarantine_measures": [
+            "Strip bottom leaves showing tiny circular dark margins with gray centers.",
+            "Never cultivate, weed, or stake when leaves are damp.",
+            "Apply thick barrier mulch over exposed soil."
+        ]
+    },
+    "Tomato___Spider_mites Two-spotted_spider_mite": {
+        "title": "Two-Spotted Spider Mites (Tetranychus urticae)",
+        "crop": "Tomato",
+        "pathogen_type": "Arachnid Pest & Foliar Damage",
+        "incubation_days_min": 5,
+        "incubation_days_max": 12,
+        "primary_vectors": ["Two-spotted spider mite adults and nymphs", "Wind ballooning on fine silk threads", "Farm machinery and worker clothing"],
+        "vector_carrier_insects": ["Tetranychus urticae (Two-Spotted Spider Mite - primary causative pest)"],
+        "vector_categories": ["Insects/Mites", "Wind", "Farm Machinery", "Worker Hands/Clothing"],
+        "host_susceptibility_stage": "Drought-stressed vegetative and fruiting canopy in midsummer",
+        "secondary_spread_rate": "Exponential (A female lays up to 100 eggs; lifecycle completes in 5 days at 30°C)",
+        "environmental_drivers": "Hot (> 28°C / 82°F), dry, dusty conditions with low relative humidity (< 40%)",
+        "quarantine_measures": [
+            "Release predatory mites (Phytoseiulus persimilis or Neoseiulus californicus) at first webbing sign.",
+            "Hose down dusty farm roads near fields to prevent dust particle settling on leaf cuticles.",
+            "Mist undersides of leaves with cold water or organic insecticidal soap."
+        ]
+    },
+    "Tomato___Target_Spot": {
+        "title": "Target Spot (Corynespora cassiicola)",
+        "crop": "Tomato",
+        "pathogen_type": "Fungus",
+        "incubation_days_min": 7,
+        "incubation_days_max": 14,
+        "primary_vectors": ["Airborne conidia", "Rain splash", "Crop debris from previous solanaceous or cucurbit crops"],
+        "vector_carrier_insects": ["None"],
+        "vector_categories": ["Wind", "Rain Splash", "Soil/Debris"],
+        "host_susceptibility_stage": "Mid to late season during dense canopy shading",
+        "secondary_spread_rate": "Moderate to Rapid (Brown target-like concentric lesions spread under humid canopy)",
+        "environmental_drivers": "High relative humidity (80-90%) and warm temperatures (20-28°C / 68-82°F)",
+        "quarantine_measures": [
+            "Improve canopy air circulation by suckering and trellising.",
+            "Rotate with non-host crops (corn, sorghum, small grains).",
+            "Apply protective fungicides (Chlorothalonil, Mancozeb) before canopy closure."
+        ]
+    },
+    "Tomato___Tomato_Yellow_Leaf_Curl_Virus": {
+        "title": "Tomato Yellow Leaf Curl Virus (TYLCV)",
+        "crop": "Tomato",
+        "pathogen_type": "Begomovirus (DNA Virus)",
+        "incubation_days_min": 10,
+        "incubation_days_max": 21,
+        "primary_vectors": ["Silverleaf whitefly (Bemisia tabaci)", "Greenhouse whitefly (Trialeurodes vaporariorum)", "Infected nursery transplants"],
+        "vector_carrier_insects": ["Bemisia tabaci (Silverleaf Whitefly / Sweetpotato Whitefly B-biotype - obligate vector)", "Trialeurodes vaporariorum"],
+        "vector_categories": ["Insects/Mites", "Nursery Stock"],
+        "host_susceptibility_stage": "Seedling to vegetative stages prior to flowering (early infection leads to 100% yield loss)",
+        "secondary_spread_rate": "Rapid (Persistent circulative transmission by whitefly populations)",
+        "environmental_drivers": "Warm, sunny, dry climates favorable to whitefly breeding explosions",
+        "quarantine_measures": [
+            "Install 50-mesh insect exclusion netting on all greenhouse and high-tunnel side vents.",
+            "Deploy yellow sticky monitoring traps across crop perimeter.",
+            "Rogue out and destroy symptomatic stunted plants immediately to remove virus reservoirs.",
+            "Apply systemic neonicotinoid or organic azadirachtin/insecticidal soap to control whitefly nymphs."
+        ]
+    },
+    "Tomato___Tomato_mosaic_virus": {
+        "title": "Tomato Mosaic Tobamovirus (ToMV)",
+        "crop": "Tomato",
+        "pathogen_type": "Tobamovirus (RNA Virus)",
+        "incubation_days_min": 7,
+        "incubation_days_max": 14,
+        "primary_vectors": ["Mechanical transmission (worker hands, pruning shears, stakes, ties)", "Worker tobacco use / residue", "Seed coat contamination", "Root contact in hydroponic or close beds"],
+        "vector_carrier_insects": ["Chewing grasshoppers or beetles (rare opportunistic transmission)"],
+        "vector_categories": ["Pruning Tools", "Worker Hands/Clothing", "Seed Borne", "Mechanical Contact"],
+        "host_susceptibility_stage": "All growth stages; severe distortion if infected as young seedling",
+        "secondary_spread_rate": "Extremely High Mechanical (Tobamoviruses are ultra-stable and easily spread by simple touch)",
+        "environmental_drivers": "Any environment; virus remains infectious on dried stakes and dead leaves for years",
+        "quarantine_measures": [
+            "Enforce strict handwashing with milk or 20% nonfat dry milk solution (milk proteins deactivate tobamovirus).",
+            "Prohibit tobacco use (cigarettes, chewing tobacco) in or near greenhouse/field.",
+            "Disinfect metal pruning shears with trisodium phosphate (TSP) or flaming.",
+            "Bag and discard infected plants; do not compost."
+        ]
+    }
+}
+
+DEFAULT_EPIDEMIOLOGY_INFO = {
+    "title": "General Foliar Pathology Profile",
+    "crop": "General Plant Specimen",
+    "pathogen_type": "Broad-Spectrum Foliar Pathogen",
+    "incubation_days_min": 5,
+    "incubation_days_max": 12,
+    "primary_vectors": ["Wind-borne fungal spores", "Rain splash and high moisture droplet drift"],
+    "vector_carrier_insects": ["Aphids, thrips, or general foliar pests"],
+    "vector_categories": ["Wind", "Rain Splash"],
+    "host_susceptibility_stage": "Active vegetative growth and dense canopy closure",
+    "secondary_spread_rate": "Moderate (Dependent on continuous leaf moisture and temperature)",
+    "environmental_drivers": "Leaf wetness duration > 6 hours and relative humidity > 80%",
+    "quarantine_measures": [
+        "Isolate symptomatic plant material immediately.",
+        "Sanitize all pruning tools in 70% isopropyl alcohol between plants.",
+        "Transition immediately to root-zone drip irrigation to prevent foliar water splashing."
+    ]
+}
+
+
+def get_disease_epidemiology_profile(class_name: str) -> dict:
+    """
+    Looks up vector transmission pathways, latent incubation period, host susceptibility,
+    and biosecurity quarantine measures for a given plant disease.
+    """
+    if not class_name:
+        return DEFAULT_EPIDEMIOLOGY_INFO
+        
+    cleaned = class_name.strip()
+    
+    # 1. Exact match
+    if cleaned in DISEASE_EPIDEMIOLOGY_DATABASE:
+        return DISEASE_EPIDEMIOLOGY_DATABASE[cleaned]
+        
+    # 2. Case-insensitive exact match
+    for k, v in DISEASE_EPIDEMIOLOGY_DATABASE.items():
+        if k.lower() == cleaned.lower():
+            return v
+            
+    # 3. Clean ' - Copy' or trailing underscores
+    normalized = cleaned.replace(" - Copy", "").strip().rstrip("_")
+    for k, v in DISEASE_EPIDEMIOLOGY_DATABASE.items():
+        if k.lower() == normalized.lower():
+            return v
+            
+    # 4. Partial key match
+    for k, v in DISEASE_EPIDEMIOLOGY_DATABASE.items():
+        if k.lower() in cleaned.lower() or cleaned.lower() in k.lower():
+            return v
+            
+    # 5. Healthy check
+    if "healthy" in cleaned.lower():
+        return {
+            "title": f"Healthy Canopy Profile ({cleaned})",
+            "crop": cleaned.split("_")[0] if "_" in cleaned else "Crop",
+            "pathogen_type": "Clean Physiological Canopy",
+            "incubation_days_min": 0,
+            "incubation_days_max": 0,
+            "primary_vectors": ["None (Plant shows robust immune defense and zero systemic infection)"],
+            "vector_carrier_insects": ["None detected"],
+            "vector_categories": ["None"],
+            "host_susceptibility_stage": "Optimal vigor across all phenological phases",
+            "secondary_spread_rate": "None (No pathogen present)",
+            "environmental_drivers": "Sustained by proper spacing, balanced nutrition, and appropriate irrigation",
+            "quarantine_measures": [
+                "Maintain routine sanitation and scouting.",
+                "Continue protective cultural regimens to preserve canopy immunity."
+            ]
+        }
+        
+    return DEFAULT_EPIDEMIOLOGY_INFO
+
+
+def find_diseases_by_vector(vector_keyword: str) -> list:
+    """
+    Searches across all disease epidemiology records for diseases matching a specific
+    vector mechanism or insect carrier (e.g. 'whitefly', 'aphid', 'wind', 'rain', 'pruning', 'seed').
+    """
+    if not vector_keyword:
+        return []
+        
+    query = vector_keyword.strip().lower()
+    matches = []
+    
+    for key, data in DISEASE_EPIDEMIOLOGY_DATABASE.items():
+        # Check primary vectors, vector categories, and carrier insects
+        vectors_text = " ".join(data.get("primary_vectors", [])).lower()
+        cats_text = " ".join(data.get("vector_categories", [])).lower()
+        insects_text = " ".join(data.get("vector_carrier_insects", [])).lower()
+        
+        if query in vectors_text or query in cats_text or query in insects_text:
+            matches.append({
+                "disease_key": key,
+                "title": data["title"],
+                "crop": data["crop"],
+                "pathogen_type": data["pathogen_type"],
+                "incubation_range": f"{data['incubation_days_min']}-{data['incubation_days_max']} days",
+                "primary_vectors": data["primary_vectors"],
+                "secondary_spread_rate": data["secondary_spread_rate"]
+            })
+            
+    return matches
