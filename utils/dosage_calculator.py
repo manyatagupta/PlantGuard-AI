@@ -524,3 +524,175 @@ def get_jar_test_protocol(selected_products: list = None, total_carrier_liters: 
         "evaluation": evaluation
     }
 
+
+# =====================================================================
+# Nozzle Orifice Selection & Spray Drift Hazard Modeling (ASABE S572.1)
+# =====================================================================
+
+AVAILABLE_NOZZLE_TYPES = {
+    "Extended Range Flat Fan (XR)": {
+        "description": "Standard agricultural flat fan. Excellent foliar coverage, but produces fine droplets prone to drift at higher pressures.",
+        "nominal_vmd": 220.0,  # Microns at 40 PSI
+        "recommended_psi_min": 15.0,
+        "recommended_psi_max": 60.0,
+        "best_for": "Contact fungicides, foliar insecticides, dense vegetable canopies.",
+        "drift_tendency": "HIGH at > 40 PSI"
+    },
+    "Air Induction Flat Fan (AI / AIC)": {
+        "description": "Venturi air aspiration draws air into nozzle body, forming large air-filled droplets that resist wind drift and shatter on leaf impact.",
+        "nominal_vmd": 480.0,  # Microns at 40 PSI
+        "recommended_psi_min": 30.0,
+        "recommended_psi_max": 90.0,
+        "best_for": "Systemic fungicides, field crops, boundary buffer zones, windy days.",
+        "drift_tendency": "MINIMAL (Drift Reduction Technology certified)"
+    },
+    "Turbo TeeJet Wide Angle (TT)": {
+        "description": "Pre-orifice design producing larger droplets with fewer drift-prone fines (< 150 µm) across a broad operating pressure range.",
+        "nominal_vmd": 340.0,  # Microns at 40 PSI
+        "recommended_psi_min": 15.0,
+        "recommended_psi_max": 90.0,
+        "best_for": "Broad-spectrum fungicides, post-emergence herbicides, row crops.",
+        "drift_tendency": "MODERATE to LOW"
+    },
+    "Hollow Cone (TX ConeJet)": {
+        "description": "Circular ring spray pattern producing fine atomized mist. Superior multi-angle canopy penetration in orchards and vineyards, but extremely high drift risk.",
+        "nominal_vmd": 140.0,  # Microns at 40 PSI
+        "recommended_psi_min": 30.0,
+        "recommended_psi_max": 100.0,
+        "best_for": "Orchard air-blast sprayers, trellis vineyards, greenhouse fogging.",
+        "drift_tendency": "EXTREMELY HIGH in open winds"
+    },
+    "Air Induction Dual Pattern (AITTJ TwinJet)": {
+        "description": "Twin 30° forward and backward air-induced fans for two-directional penetration with high drift reduction.",
+        "nominal_vmd": 420.0,  # Microns at 40 PSI
+        "recommended_psi_min": 30.0,
+        "recommended_psi_max": 90.0,
+        "best_for": "Dense tomato/potato canopies, cereal head blight, scab control.",
+        "drift_tendency": "VERY LOW"
+    }
+}
+
+
+def get_available_nozzle_types() -> list:
+    """Returns list of available nozzle type options for sprayer calibration."""
+    return list(AVAILABLE_NOZZLE_TYPES.keys())
+
+
+def calculate_spray_drift_and_nozzle_specs(
+    nozzle_type: str = "Extended Range Flat Fan (XR)",
+    boom_pressure_psi: float = 40.0,
+    wind_speed_mph: float = 5.0,
+    boom_height_inches: float = 20.0,
+    ground_speed_mph: float = 5.0
+) -> dict:
+    """
+    Simulates droplet spectrum (VMD in microns), ASABE S572.1 classification,
+    canopy penetration efficiency, drift hazard score, and downwind buffer setback distance.
+    """
+    nozzle_data = AVAILABLE_NOZZLE_TYPES.get(
+        nozzle_type, 
+        AVAILABLE_NOZZLE_TYPES["Extended Range Flat Fan (XR)"]
+    )
+    
+    # 1. Calculate Volume Median Diameter (VMD) adjusted for boom pressure
+    # Physical relationship: VMD varies inversely with pressure^0.33
+    base_vmd = nozzle_data["nominal_vmd"]
+    pressure_clamped = max(10.0, min(120.0, boom_pressure_psi))
+    vmd_microns = round(base_vmd * ((40.0 / pressure_clamped) ** 0.33), 1)
+    
+    # 2. ASABE S572.1 / ISO Droplet Size Spectrum Classification
+    if vmd_microns < 145:
+        category = "Very Fine (VF)"
+        color_code = "#ef4444"  # Red
+        description = "Fine atomized mist. Maximum foliar coverage on top surfaces, but extreme drift hazard."
+        canopy_penetration = "Moderate (High surface deposit, low deep canopy wash)"
+        penetration_pct = 65
+    elif vmd_microns <= 225:
+        category = "Fine (F)"
+        color_code = "#f97316"  # Orange
+        description = "Small droplets. Ideal for contact fungicides and foliar insects; high drift sensitivity."
+        canopy_penetration = "High (Excellent coverage for dense foliar targets)"
+        penetration_pct = 90
+    elif vmd_microns <= 325:
+        category = "Medium (M)"
+        color_code = "#eab308"  # Yellow
+        description = "Balanced droplet spectrum. Optimal balance between coverage and drift control for systemic products."
+        canopy_penetration = "Excellent (Optimal all-around balance)"
+        penetration_pct = 95
+    elif vmd_microns <= 400:
+        category = "Coarse (C)"
+        color_code = "#3b82f6"  # Blue
+        description = "Large droplets. Good drift control; well suited for systemic fungicides and windy field passes."
+        canopy_penetration = "Good (Slightly reduced droplet count per cm²)"
+        penetration_pct = 80
+    elif vmd_microns <= 500:
+        category = "Very Coarse (VC)"
+        color_code = "#10b981"  # Green
+        description = "Very large droplets. High drift resistance. Recommended near sensitive waterways and adjacent crops."
+        canopy_penetration = "Moderate (Requires higher carrier water GPA to ensure thorough coverage)"
+        penetration_pct = 70
+    else:
+        category = "Ultra Coarse (UC)"
+        color_code = "#64748b"  # Slate / Black
+        description = "Massive droplets containing air bubbles. Near-zero drift risk, lower droplet density."
+        canopy_penetration = "Low to Moderate (Target for buffer strips and soil applications)"
+        penetration_pct = 55
+        
+    # 3. Drift Hazard Modeling (0 to 100 score)
+    fine_fraction_pct = max(2.0, min(75.0, 100.0 * (150.0 / (vmd_microns + 50.0)) ** 1.8))
+    
+    if wind_speed_mph < 2.0:
+        wind_penalty = 25.0  # Temperature inversion danger
+        wind_status = "INVERSION RISK: Low air mixing can cause chemical vapor clouds to travel miles laterally."
+    elif wind_speed_mph <= 7.0:
+        wind_penalty = 5.0
+        wind_status = "OPTIMAL: Safe operational wind window (3-7 mph)."
+    elif wind_speed_mph <= 10.0:
+        wind_penalty = 30.0
+        wind_status = "CAUTION: Moderate wind (8-10 mph). Downwind drift hazard elevated."
+    else:
+        wind_penalty = 55.0
+        wind_status = "PROHIBITED / HIGH RISK: Wind exceeds 10 mph. Legal label drift limits exceeded."
+        
+    height_factor = max(1.0, (boom_height_inches / 20.0) ** 1.4)
+    
+    raw_drift_score = (fine_fraction_pct * 0.7 + wind_penalty) * (height_factor * 0.6)
+    drift_hazard_score = min(100.0, max(5.0, round(raw_drift_score, 1)))
+    
+    # 4. Downwind Buffer Setback Distance (in Feet and Meters)
+    setback_distance_ft = round(max(10.0, (drift_hazard_score * 0.9) * max(1.0, wind_speed_mph / 4.0) * (boom_height_inches / 20.0)), 1)
+    setback_distance_m = round(setback_distance_ft * 0.3048, 1)
+    
+    # 5. Pressure and operational envelope warnings
+    pressure_warnings = []
+    if boom_pressure_psi < nozzle_data["recommended_psi_min"]:
+        pressure_warnings.append(f"Pressure ({boom_pressure_psi} PSI) is below recommended minimum ({nozzle_data['recommended_psi_min']} PSI). Spray fan may collapse or develop poor pattern uniformity.")
+    elif boom_pressure_psi > nozzle_data["recommended_psi_max"]:
+        pressure_warnings.append(f"Pressure ({boom_pressure_psi} PSI) exceeds recommended maximum ({nozzle_data['recommended_psi_max']} PSI). Excessive droplet atomization drastically increases drift risk.")
+        
+    if boom_height_inches > 30.0:
+        pressure_warnings.append(f"Boom height ({boom_height_inches} in.) is excessively high above canopy. Lower boom to 20-24 inches to reduce droplet flight time.")
+        
+    return {
+        "nozzle_type": nozzle_type,
+        "operating_pressure_psi": boom_pressure_psi,
+        "wind_speed_mph": wind_speed_mph,
+        "boom_height_inches": boom_height_inches,
+        "ground_speed_mph": ground_speed_mph,
+        "vmd_microns": vmd_microns,
+        "asabe_category": category,
+        "color_code": color_code,
+        "description": description,
+        "canopy_penetration": canopy_penetration,
+        "penetration_pct": penetration_pct,
+        "drift_hazard_score": drift_hazard_score,
+        "drift_level": "CRITICAL" if drift_hazard_score >= 65 else ("MODERATE" if drift_hazard_score >= 35 else "LOW"),
+        "fine_droplets_pct": round(fine_fraction_pct, 1),
+        "setback_buffer_ft": setback_distance_ft,
+        "setback_buffer_m": setback_distance_m,
+        "wind_status": wind_status,
+        "warnings": pressure_warnings,
+        "best_for": nozzle_data["best_for"],
+        "nozzle_description": nozzle_data["description"]
+    }
+
