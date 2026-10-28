@@ -322,11 +322,23 @@ class TestExportUtils(unittest.TestCase):
     def test_export_csv_string(self):
         from utils.export_utils import export_predictions_to_csv_string
         sample_preds = [
-            {"timestamp": "2026-10-17 12:00:00", "filename": "sample.jpg", "class": "Tomato Early blight", "conf": 0.92, "is_healthy": False, "damage_pct": 14.2, "severity_grade": "Grade 2"}
+            {
+                "timestamp": "2026-10-17 12:00:00", 
+                "filename": "sample.jpg", 
+                "class": "Tomato Early blight", 
+                "conf": 0.92, 
+                "is_healthy": False, 
+                "damage_pct": 14.2, 
+                "severity_grade": "Grade 2",
+                "farm_zone": "Greenhouse Bay 4",
+                "notes": "Targeted with Neem spray"
+            }
         ]
         csv_str = export_predictions_to_csv_string(sample_preds)
         self.assertIn("Tomato Early blight", csv_str)
         self.assertIn("14.2", csv_str)
+        self.assertIn("Greenhouse Bay 4", csv_str)
+        self.assertIn("Targeted with Neem spray", csv_str)
         self.assertTrue(csv_str.startswith("\ufeff"))
 
     def test_generate_checklist_html(self):

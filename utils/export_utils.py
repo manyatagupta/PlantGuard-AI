@@ -16,7 +16,10 @@ def export_predictions_to_csv_string(predictions: list) -> str:
     # Write UTF-8 BOM for Microsoft Excel auto-encoding
     output.write('\ufeff')
     
-    fieldnames = ["ID", "Timestamp", "Specimen Filename", "Diagnosis", "Confidence (%)", "Health Status", "Canopy Damage (%)", "Severity Grade"]
+    fieldnames = [
+        "ID", "Timestamp", "Specimen Filename", "Diagnosis", "Confidence (%)", 
+        "Health Status", "Canopy Damage (%)", "Severity Grade", "Farm Zone / Lot", "Field Notes"
+    ]
     writer = csv.DictWriter(output, fieldnames=fieldnames)
     writer.writeheader()
     
@@ -29,7 +32,9 @@ def export_predictions_to_csv_string(predictions: list) -> str:
             "Confidence (%)": f"{float(row.get('conf', 0.0)) * 100:.1f}",
             "Health Status": "Healthy" if row.get("is_healthy") else "Infected",
             "Canopy Damage (%)": f"{float(row.get('damage_pct', 0.0)):.1f}",
-            "Severity Grade": row.get("severity_grade", "N/A")
+            "Severity Grade": row.get("severity_grade", "N/A"),
+            "Farm Zone / Lot": row.get("farm_zone", "Unassigned Zone"),
+            "Field Notes": row.get("notes", "")
         })
         
     return output.getvalue()
