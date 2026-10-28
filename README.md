@@ -3,7 +3,7 @@
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue?style=for-the-badge&logo=python)
 ![TensorFlow](https://img.shields.io/badge/TensorFlow-2.x-orange?style=for-the-badge&logo=tensorflow)
 ![Streamlit](https://img.shields.io/badge/Streamlit-1.x-red?style=for-the-badge&logo=streamlit)
-![Tests](https://img.shields.io/badge/Tests-40%20Passed-brightgreen?style=for-the-badge&logo=pytest)
+![Tests](https://img.shields.io/badge/Tests-49%20Passed-brightgreen?style=for-the-badge&logo=pytest)
 ![CI](https://img.shields.io/badge/CI-Automated-success?style=for-the-badge&logo=githubactions)
 ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
@@ -15,6 +15,9 @@ PlantGuard AI is an intelligent, full-stack web application designed to help far
 **⚠️ Disclaimer:** This system is built for educational and assistive purposes and should not replace professional agricultural advice.
 
 ## ✨ Key Features
+- **🔬 Crop Pathology Vector, Incubation & Host Susceptibility Engine**: Complete epidemiology database mapping incubation latent periods (days), primary transmission vectors (wind, rain splash, seed-borne, pruning shears), and insect vector carriers (*Bemisia tabaci* whiteflies, *Epitrix* flea beetles, *Tetranychus urticae* spider mites) with biosecurity quarantine containment checklists.
+- **🎯 Nozzle Orifice Selection & Spray Drift Hazard Simulator (ASABE S572.1 / ISO)**: Models Volume Median Diameter (VMD in microns), ASABE droplet spectrum classification (Very Fine through Ultra Coarse), boom pressure atomization curve ($VMD \propto P^{-0.33}$), fine drift fraction ($< 150 \mu m$), drift hazard scoring (0-100), canopy penetration ratings, and downwind buffer setback distances (ft/m) to protect sensitive waterways and neighboring organic plots.
+- **🔍 Multi-Criteria EPA Chemical Catalog & Safety Interval Search**: Filters certified agricultural products by FRAC mode of action group, worker re-entry intervals (REI: 4h, 12h, 24h), pre-harvest withholding safety (PHI), pollinator toxicity, and target resistance risk.
 - **📦 Multi-Leaf Canopy Batch Scanner & Canopy Health Index (CHI)**: High-throughput batch foliage processor that surveys entire tree canopies or crop rows simultaneously, computes aggregate Canopy Health Index (CHI from 0 to 100), performs automated phytopathological triage (Critical, Warning, Mild, Healthy), provides side-by-side lesion mask galleries, and exports RFC-4180 batch CSV reports.
 - **🗺️ Multi-Zone Farm IoT Spatial Grid & Psychrometric Dew Point Engine**: Computes thermodynamic dew point margins and absolute humidity ($g/m^3$) across four distinct farm zones (Polyhouse, High-Tunnel, Orchard Canopy, Open Field) to catch free leaf condensation before fungal zoospores germinate.
 - **🔄 Multi-Season FRAC Anti-Resistance Rotation Planner**: Audits sequences of fungicide applications against consecutive single-site exposure limits, tracks legal annual caps, and computes an automated Pathogen Resistance Risk Score (0-100).
