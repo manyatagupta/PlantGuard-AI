@@ -14,14 +14,18 @@ from utils.db import (
     export_history_json
 )
 from utils.pdf_generator import generate_pdf_report
-from utils.disease_expert import get_disease_expert_info, get_all_disease_guides
+from utils.disease_expert import (
+    get_disease_expert_info, get_all_disease_guides,
+    get_disease_epidemiology_profile, find_diseases_by_vector
+)
 from utils.weather_risk import (
     fetch_live_weather, calculate_disease_outbreak_risk, WEATHER_PRESETS,
     get_regional_monitoring_stations
 )
 from utils.dosage_calculator import (
     compute_spray_dosage, get_all_products, get_product_details, 
-    TREATMENT_DATABASE, check_tank_mix_compatibility, get_jar_test_protocol
+    TREATMENT_DATABASE, check_tank_mix_compatibility, get_jar_test_protocol,
+    calculate_spray_drift_and_nozzle_specs, get_available_nozzle_types, AVAILABLE_NOZZLE_TYPES
 )
 from utils.leaf_cv import analyze_leaf_damage
 from utils.agronomy_brain import query_agronomy_brain, SUGGESTED_QUESTIONS
@@ -33,7 +37,7 @@ from utils.cost_estimator import (
 from utils.recovery_tracker import evaluate_treatment_recovery
 from utils.chemical_scanner import (
     lookup_chemical_by_epa_or_name, get_all_chemical_catalog, get_frac_rotation_guidance,
-    evaluate_seasonal_rotation_plan
+    evaluate_seasonal_rotation_plan, filter_chemicals
 )
 from utils.nutrient_diagnostics import (
     diagnose_nutrient_deficiency, get_deficiency_vs_disease_comparison, 
@@ -1165,6 +1169,35 @@ def main():
         with col_hb3:
             category_filter = st.selectbox("🔬 Category Filter", ["All Categories", "Fungal Infection", "Bacterial Infection", "Viral Disease", "Pest Infestation", "Healthy Plant"])
             
+        with st.expander("🔬 Crop Pathology Vector & Transmission Lookup", expanded=False):
+            st.markdown("##### Filter crop pathogens by insect carrier, meteorological vector, or mechanical pathway:")
+            col_v1, col_v2 = st.columns([1.5, 2.5])
+            with col_v1:
+                vector_preset = st.selectbox(
+                    "Select Transmission Pathway:",
+                    ["All Vectors", "Whitefly", "Spider Mites", "Aphids / Flea Beetles", "Rain Splash", "Wind", "Pruning Tools", "Seed Borne"]
+                )
+                custom_vec_query = st.text_input("Or enter custom vector keyword:", "")
+            with col_v2:
+                active_vector = custom_vec_query.strip() if custom_vec_query else (vector_preset if vector_preset != "All Vectors" else "")
+                if "Flea" in active_vector:
+                    active_vector = "flea"
+                if active_vector:
+                    v_matches = find_diseases_by_vector(active_vector)
+                    st.markdown(f"**Found {len(v_matches)} diseases transmitted via '{active_vector}':**")
+                    for vm in v_matches[:6]:
+                        st.markdown(f"""
+                        <div class='metric-card' style='margin-bottom:6px; padding:8px 12px;'>
+                            <div style='display:flex; justify-content:space-between;'>
+                                <strong>{vm['title']}</strong>
+                                <span style='color:#34d399; font-weight:700;'>⏱️ {vm['incubation_range']}</span>
+                            </div>
+                            <div style='font-size:0.8rem; color:#94a3b8;'>Pathogen: {vm['pathogen_type']} • Spread: {vm['secondary_spread_rate']}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                else:
+                    st.info("Select a transmission vector or type a keyword to see which crop pathogens share that dispersal mechanism.")
+
         st.markdown("---")
         
         # Filter guides
@@ -1206,12 +1239,13 @@ def main():
                 st.info(f"**Urgency:** {guide.get('urgency')}")
                 st.markdown(f"**Overview:** {guide.get('description')}")
                 
-                tab_g1, tab_g2, tab_g3, tab_g4, tab_g5 = st.tabs([
+                tab_g1, tab_g2, tab_g3, tab_g4, tab_g5, tab_g6 = st.tabs([
                     "🔍 Symptoms & Causes",
                     "⚡ Immediate Actions",
                     "🌿 Organic Remedies",
                     "🧪 Chemical Treatments",
-                    "🛡️ Prevention & Nutrition"
+                    "🛡️ Prevention & Nutrition",
+                    "🔬 Vector & Incubation"
                 ])
                 
                 with tab_g1:
@@ -1254,6 +1288,29 @@ def main():
                     else:
                         st.write(prev)
                     st.markdown(f"**Nutrition & Care Regimen:**\n{guide.get('nutrition_and_care', 'N/A')}")
+                    
+                with tab_g6:
+                    epi = get_disease_epidemiology_profile(k)
+                    st.markdown("##### 🔬 Pathology Vector & Host Susceptibility Profile:")
+                    col_ep1, col_ep2 = st.columns(2)
+                    with col_ep1:
+                        st.markdown(f"**Pathogen Type:** `{epi.get('pathogen_type', 'Pathogen')}`")
+                        inc_min = epi.get('incubation_days_min', 0)
+                        inc_max = epi.get('incubation_days_max', 0)
+                        if inc_min == 0 and inc_max == 0:
+                            st.markdown("**Latent Incubation Period:** `N/A (Healthy)`")
+                        else:
+                            st.markdown(f"**Latent Incubation Period:** `{inc_min} to {inc_max} Days`")
+                        st.markdown(f"**Primary Vectors:** {', '.join(epi.get('primary_vectors', ['N/A']))}")
+                        st.markdown(f"**Vector Carrier Insects:** {', '.join(epi.get('vector_carrier_insects', ['None']))}")
+                    with col_ep2:
+                        st.markdown(f"**Host Vulnerability Stage:** {epi.get('host_susceptibility_stage', 'All stages')}")
+                        st.markdown(f"**Secondary Spread Rate:** `{epi.get('secondary_spread_rate', 'Moderate')}`")
+                        st.markdown(f"**Environmental Drivers:** {epi.get('environmental_drivers', 'N/A')}")
+                    
+                    st.markdown("###### 🛑 Biosecurity Quarantine & Containment Checklist:")
+                    for q in epi.get("quarantine_measures", []):
+                        st.markdown(f"- {q}")
         return
 
     # Disease Outbreak Risk Forecaster View
@@ -1481,9 +1538,10 @@ def main():
         st.title("⚖️ Precision Spray & Fertilizer Dosage Calculator")
         st.markdown("### Compute exact carrier water volume, chemical/organic concentrate, and tank mixing recipes tailored to your farm.")
         
-        tab_dose, tab_tank = st.tabs([
+        tab_dose, tab_tank, tab_drift = st.tabs([
             "⚖️ Field Dosage & Economic ROI Estimator", 
-            "🧪 Tank-Mix Incompatibility & Jar Test Simulator"
+            "🧪 Tank-Mix Incompatibility & Jar Test Simulator",
+            "🎯 Nozzle Selection & Spray Drift Simulator"
         ])
 
         with tab_dose:
@@ -1701,6 +1759,38 @@ def main():
                             for viol in rot_audit["violations"]:
                                 st.error(f"Violation: {viol['description']}")
 
+                    st.markdown("---")
+                    st.markdown("##### 🔍 EPA Registered Chemical Catalog Multi-Criteria Filter")
+                    st.caption("Search across legal EPA fungicides by FRAC mode of action, worker safety intervals (REI), and pollinator toxicity.")
+                    col_cf1, col_cf2, col_cf3 = st.columns([1.2, 1, 1])
+                    with col_cf1:
+                        frac_filter_query = st.text_input("Filter by FRAC Group (e.g. Group 11, Group 7, Group M, Group 3):", "", key="frac_cat_filter_input")
+                    with col_cf2:
+                        max_rei_choice = st.selectbox("Max Field Re-entry (REI):", ["Any REI", "4 Hours", "12 Hours", "24 Hours"], key="max_rei_cat_select")
+                        max_rei_val = int(max_rei_choice.split()[0]) if "Hour" in max_rei_choice else None
+                    with col_cf3:
+                        pollinator_only = st.checkbox("🐝 Pollinator Safe Only", value=False, key="poll_safe_cat_check")
+                    
+                    filtered_chems = filter_chemicals(
+                        frac_group=frac_filter_query,
+                        max_rei_hours=max_rei_val,
+                        pollinator_safe_only=pollinator_only
+                    )
+                    st.markdown(f"**Found {len(filtered_chems)} EPA registered products:**")
+                    if filtered_chems:
+                        cf_data = []
+                        for c in filtered_chems:
+                            cf_data.append({
+                                "Trade Name": c["trade_name"],
+                                "EPA Reg #": c["epa_reg_no"],
+                                "FRAC Group": c["frac_group"],
+                                "REI (Hrs)": f"{c.get('rei_hours', 12)}h",
+                                "PHI (Days)": f"{c.get('phi_days', 0)}d",
+                                "Resistance Risk": c["resistance_risk"],
+                                "Pollinator Safety": c["pollinator_safety"]
+                            })
+                        st.dataframe(pd.DataFrame(cf_data), use_container_width=True)
+
                 # Printable Prescription Text Download
                 recipe_text = f"""PLANTGUARD AI - SPRAY & FERTILIZER PRESCRIPTION SHEET
     =============================================================
@@ -1841,6 +1931,81 @@ def main():
                         """, unsafe_allow_html=True)
                 else:
                     st.info("Select 2 or more products on the left to generate the tailored 1-pint jar test formulation.")
+
+        with tab_drift:
+            st.markdown("#### 🎯 Nozzle Orifice Selection & Spray Drift Hazard Simulator (ASABE S572.1 / ISO)")
+            st.markdown("Off-target chemical drift causes expensive legal liability, water contamination, and reduced canopy deposition. Calibrate nozzle droplet size, boom height, and wind threshold before pulling into the field.")
+            
+            col_ns1, col_ns2 = st.columns([1.2, 1.3], gap="large")
+            with col_ns1:
+                st.markdown("##### 1️⃣ Sprayer Rig Calibration")
+                nozzle_choices = get_available_nozzle_types()
+                selected_nozzle = st.selectbox("Select Nozzle Body Type:", nozzle_choices, index=0)
+                
+                nozzle_info = AVAILABLE_NOZZLE_TYPES[selected_nozzle]
+                st.caption(f"ℹ️ {nozzle_info['description']}")
+                
+                boom_press = st.slider("Boom Operating Pressure (PSI):", min_value=15.0, max_value=90.0, value=40.0, step=5.0)
+                wind_speed = st.slider("Crosswind Speed (mph):", min_value=0.0, max_value=18.0, value=6.0, step=0.5)
+                boom_height = st.slider("Boom Height Above Crop Canopy (inches):", min_value=15.0, max_value=42.0, value=20.0, step=1.0)
+                ground_speed = st.slider("Tractor Ground Speed (mph):", min_value=2.0, max_value=12.0, value=5.0, step=0.5)
+                
+            with col_ns2:
+                st.markdown("##### 2️⃣ Droplet Spectrum & Drift Physics")
+                drift_calc = calculate_spray_drift_and_nozzle_specs(
+                    nozzle_type=selected_nozzle,
+                    boom_pressure_psi=boom_press,
+                    wind_speed_mph=wind_speed,
+                    boom_height_inches=boom_height,
+                    ground_speed_mph=ground_speed
+                )
+                
+                col_dm1, col_dm2, col_dm3 = st.columns(3)
+                with col_dm1:
+                    st.markdown(f"""
+                    <div class='metric-card' style='text-align:center;'>
+                        <div style='font-size:0.8rem; color:#94a3b8;'>VMD Droplet Size</div>
+                        <div style='font-size:1.8rem; font-weight:800; color:{drift_calc["color_code"]};'>{drift_calc["vmd_microns"]} µm</div>
+                        <div style='font-size:0.75rem; color:{drift_calc["color_code"]}; font-weight:700;'>{drift_calc["asabe_category"]}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                with col_dm2:
+                    d_color = "#ef4444" if drift_calc["drift_level"] == "CRITICAL" else ("#f59e0b" if drift_calc["drift_level"] == "MODERATE" else "#10b981")
+                    st.markdown(f"""
+                    <div class='metric-card' style='text-align:center;'>
+                        <div style='font-size:0.8rem; color:#94a3b8;'>Drift Hazard Score</div>
+                        <div style='font-size:1.8rem; font-weight:800; color:{d_color};'>{drift_calc["drift_hazard_score"]}/100</div>
+                        <div style='font-size:0.75rem; color:{d_color}; font-weight:700;'>{drift_calc["drift_level"]} HAZARD</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                with col_dm3:
+                    st.markdown(f"""
+                    <div class='metric-card' style='text-align:center;'>
+                        <div style='font-size:0.8rem; color:#94a3b8;'>Buffer Setback</div>
+                        <div style='font-size:1.8rem; font-weight:800; color:#3b82f6;'>{drift_calc["setback_buffer_ft"]} ft</div>
+                        <div style='font-size:0.75rem; color:#94a3b8;'>({drift_calc["setback_buffer_m"]} meters)</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                st.markdown(f"""
+                <div class='disease-card' style='border-color:{drift_calc["color_code"]}; margin-top:15px;'>
+                    <div style='display:flex; justify-content:space-between;'>
+                        <strong style='color:{drift_calc["color_code"]}; font-size:1.05rem;'>Droplet Spectrum: {drift_calc["asabe_category"]}</strong>
+                        <span style='color:#cbd5e1; font-size:0.85rem;'>Fines (&lt;150 µm): <strong>{drift_calc["fine_droplets_pct"]}%</strong></span>
+                    </div>
+                    <p style='color:#cbd5e1; font-size:0.9rem; margin:8px 0;'>{drift_calc["description"]}</p>
+                    <div style='font-size:0.85rem; color:#94a3b8;'>
+                        <strong>Canopy Penetration:</strong> {drift_calc["canopy_penetration"]} ({drift_calc["penetration_pct"]}%)<br>
+                        <strong>Recommended Agronomic Target:</strong> {drift_calc["best_for"]}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                st.markdown(f"**Meteorological Wind Status:** {drift_calc['wind_status']}")
+                
+                if drift_calc["warnings"]:
+                    for w in drift_calc["warnings"]:
+                        st.warning(f"⚠️ {w}")
         return
 
     # Scanner View Content
