@@ -553,6 +553,98 @@ class TestDatasetValidationUtility(unittest.TestCase):
                 shutil.rmtree(test_dir)
 
 
+class TestCropPathologyVectorAndIncubation(unittest.TestCase):
+    """Tests for disease incubation periods, vector insect carriers, and secondary spread dynamics."""
+
+    def test_epidemiology_profile_lookup(self):
+        from utils.disease_expert import get_disease_epidemiology_profile
+        prof = get_disease_epidemiology_profile("Apple___Apple_scab")
+        self.assertEqual(prof["crop"], "Apple")
+        self.assertEqual(prof["incubation_days_min"], 8)
+        self.assertEqual(prof["incubation_days_max"], 14)
+        self.assertIn("Wind-borne ascospores", prof["primary_vectors"])
+        self.assertGreaterEqual(len(prof["quarantine_measures"]), 1)
+
+    def test_epidemiology_healthy_fallback(self):
+        from utils.disease_expert import get_disease_epidemiology_profile
+        prof = get_disease_epidemiology_profile("Tomato_healthy")
+        self.assertEqual(prof["incubation_days_min"], 0)
+        self.assertEqual(prof["secondary_spread_rate"], "None (No pathogen present)")
+
+    def test_find_diseases_by_vector(self):
+        from utils.disease_expert import find_diseases_by_vector
+        whitefly_diseases = find_diseases_by_vector("whitefly")
+        self.assertGreaterEqual(len(whitefly_diseases), 1)
+        self.assertTrue(any("Yellow_Leaf_Curl" in d["disease_key"] for d in whitefly_diseases))
+
+        rain_diseases = find_diseases_by_vector("rain splash")
+        self.assertGreaterEqual(len(rain_diseases), 3)
+
+
+class TestSprayDriftAndNozzlePhysics(unittest.TestCase):
+    """Tests for ASABE S572.1 droplet classification, boom pressure VMD, and drift hazard modeling."""
+
+    def test_nozzle_types_available(self):
+        from utils.dosage_calculator import get_available_nozzle_types
+        types = get_available_nozzle_types()
+        self.assertGreaterEqual(len(types), 4)
+        self.assertIn("Air Induction Flat Fan (AI / AIC)", types)
+
+    def test_spray_drift_standard_vs_air_induction(self):
+        from utils.dosage_calculator import calculate_spray_drift_and_nozzle_specs
+        xr_spec = calculate_spray_drift_and_nozzle_specs(
+            nozzle_type="Extended Range Flat Fan (XR)",
+            boom_pressure_psi=50.0,
+            wind_speed_mph=6.0
+        )
+        ai_spec = calculate_spray_drift_and_nozzle_specs(
+            nozzle_type="Air Induction Flat Fan (AI / AIC)",
+            boom_pressure_psi=50.0,
+            wind_speed_mph=6.0
+        )
+        self.assertGreater(ai_spec["vmd_microns"], xr_spec["vmd_microns"])
+        self.assertLess(ai_spec["drift_hazard_score"], xr_spec["drift_hazard_score"])
+        self.assertTrue(any(cat in xr_spec["asabe_category"].lower() for cat in ["fine", "medium"]))
+
+    def test_high_wind_drift_hazard(self):
+        from utils.dosage_calculator import calculate_spray_drift_and_nozzle_specs
+        spec = calculate_spray_drift_and_nozzle_specs(
+            nozzle_type="Hollow Cone (TX ConeJet)",
+            boom_pressure_psi=60.0,
+            wind_speed_mph=14.0,
+            boom_height_inches=32.0
+        )
+        self.assertGreaterEqual(spec["drift_hazard_score"], 60.0)
+        self.assertIn("PROHIBITED", spec["wind_status"])
+        self.assertGreater(spec["setback_buffer_ft"], 25.0)
+        self.assertGreaterEqual(len(spec["warnings"]), 1)
+
+
+class TestChemicalCatalogFiltering(unittest.TestCase):
+    """Tests for multi-criteria chemical catalog queries by FRAC, REI, PHI, and pollinator safety."""
+
+    def test_filter_by_frac(self):
+        from utils.chemical_scanner import filter_chemicals
+        g11 = filter_chemicals(frac_group="Group 11")
+        self.assertGreaterEqual(len(g11), 1)
+        for prod in g11:
+            self.assertIn("11", prod["frac_group"])
+
+    def test_filter_by_rei_and_pollinator(self):
+        from utils.chemical_scanner import filter_chemicals
+        results = filter_chemicals(max_rei_hours=12, pollinator_safe_only=True)
+        self.assertGreaterEqual(len(results), 2)
+        for prod in results:
+            self.assertLessEqual(prod["rei_hours"], 12)
+
+    def test_filter_by_phi(self):
+        from utils.chemical_scanner import filter_chemicals
+        harvest_ready = filter_chemicals(max_phi_days=1)
+        self.assertGreaterEqual(len(harvest_ready), 3)
+        for prod in harvest_ready:
+            self.assertLessEqual(prod["phi_days"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()
 
