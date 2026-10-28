@@ -19,6 +19,8 @@ EPA_REGISTRATION_REGISTRY = {
         "signal_word": "CAUTION",
         "max_annual_apps": 2,
         "rainfast_hours": 2.0,
+        "rei_hours": 4,
+        "phi_days": 0,
         "pollinator_safety": "Low Toxicity to Honeybees",
         "restricted_mixes": ["Do not tank mix with silicone surfactants or crop oils on sensitive apple varieties (Gala, McIntosh)"],
         "recommended_rotation": ["Group 3 (DMI / Triazoles)", "Group 7 (SDHI)", "Group M (Multi-site Protectants)"]
@@ -34,6 +36,8 @@ EPA_REGISTRATION_REGISTRY = {
         "signal_word": "CAUTION",
         "max_annual_apps": 12,
         "rainfast_hours": 4.0,
+        "rei_hours": 4,
+        "phi_days": 0,
         "pollinator_safety": "Toxic if directly sprayed onto foraging bees; safe once dried",
         "restricted_mixes": ["Strictly prohibited to mix with or apply within 30 days of Sulfur WP"],
         "recommended_rotation": ["Group 44 (Bacillus subtilis)", "Group BM02 (Tea tree oil)", "Group M (Copper)"]
@@ -49,6 +53,8 @@ EPA_REGISTRATION_REGISTRY = {
         "signal_word": "CAUTION",
         "max_annual_apps": 6,
         "rainfast_hours": 4.0,
+        "rei_hours": 12,
+        "phi_days": 1,
         "pollinator_safety": "Virtually non-toxic to adult honeybees",
         "restricted_mixes": ["Do not tank mix with acidic buffers that drop spray pH below 6.0 (phytotoxic copper ion release)"],
         "recommended_rotation": ["Group 11 (Strobilurin)", "Group 3 (DMI)", "Group 44 (Biofungicides)"]
@@ -64,6 +70,8 @@ EPA_REGISTRATION_REGISTRY = {
         "signal_word": "CAUTION",
         "max_annual_apps": 2,
         "rainfast_hours": 1.5,
+        "rei_hours": 12,
+        "phi_days": 7,
         "pollinator_safety": "Safe for bees when applied per label directions",
         "restricted_mixes": ["Do not apply in conjunction with high salt fertilizers during bloom"],
         "recommended_rotation": ["Group 3 (Triazoles)", "Group 11 (Strobilurins)", "Group M02 (Sulfur)"]
@@ -79,6 +87,8 @@ EPA_REGISTRATION_REGISTRY = {
         "signal_word": "CAUTION",
         "max_annual_apps": 4,
         "rainfast_hours": 3.0,
+        "rei_hours": 24,
+        "phi_days": 14,
         "pollinator_safety": "Non-toxic to bees once foliar deposit is dry",
         "restricted_mixes": ["Incompatible with highly alkaline materials (Bordeaux mix, lime)"],
         "recommended_rotation": ["Group 11 (Strobilurin)", "Group 7 (SDHI)", "Group 21 (Cyazofamid)"]
@@ -94,6 +104,8 @@ EPA_REGISTRATION_REGISTRY = {
         "signal_word": "DANGER (Eye irritation hazard)",
         "max_annual_apps": 3,
         "rainfast_hours": 2.0,
+        "rei_hours": 12,
+        "phi_days": 7,
         "pollinator_safety": "Non-toxic to adult bees; toxic to aquatic organisms",
         "restricted_mixes": ["Do not combine with organosilicate stickers; do not apply to apples post-petal fall"],
         "recommended_rotation": ["Group 3 (DMI)", "Group 7 (SDHI)", "Group 40 (Carboxylic acid amides)"]
@@ -109,9 +121,62 @@ EPA_REGISTRATION_REGISTRY = {
         "signal_word": "CAUTION",
         "max_annual_apps": 10,
         "rainfast_hours": 3.0,
+        "rei_hours": 4,
+        "phi_days": 0,
         "pollinator_safety": "Completely bee safe; OMRI listed for organic production",
         "restricted_mixes": ["Compatible with most protectants; do not mix with live mycorrhizal inoculants"],
         "recommended_rotation": ["Group M (Copper)", "Group 44 (Alternate Bio-fungicides)", "Group BM02"]
+    },
+    "62719-410": {
+        "trade_name": "Rally 40WSP (Myclobutanil)",
+        "active_ingredient": "Myclobutanil (40.0%)",
+        "epa_reg_no": "62719-410",
+        "barcode": "062719410011",
+        "frac_group": "Group 3 (DMI / Triazoles)",
+        "mode_of_action": "Inhibits C14-demethylase in sterol biosynthesis (ergosterol inhibitor)",
+        "resistance_risk": "MEDIUM",
+        "signal_word": "CAUTION",
+        "max_annual_apps": 4,
+        "rainfast_hours": 2.0,
+        "rei_hours": 24,
+        "phi_days": 14,
+        "pollinator_safety": "Non-toxic to adult honeybees",
+        "restricted_mixes": ["Do not tank mix with captan during bloom on sensitive fruit cultivars"],
+        "recommended_rotation": ["Group 11 (Strobilurins)", "Group 7 (SDHI)", "Group M (Multi-site)"]
+    },
+    "7969-199": {
+        "trade_name": "Pristine Fungicide",
+        "active_ingredient": "Pyraclostrobin (12.8%) + Boscalid (25.2%)",
+        "epa_reg_no": "7969-199",
+        "barcode": "079691990033",
+        "frac_group": "Group 11 (QoI) + Group 7 (SDHI)",
+        "mode_of_action": "Dual site: Inhibits Complex II + Complex III fungal respiration",
+        "resistance_risk": "HIGH",
+        "signal_word": "CAUTION",
+        "max_annual_apps": 2,
+        "rainfast_hours": 2.0,
+        "rei_hours": 12,
+        "phi_days": 0,
+        "pollinator_safety": "Low toxicity to adult bees; avoid direct bloom mist",
+        "restricted_mixes": ["Do not combine with foliar nutrient salts at high concentration"],
+        "recommended_rotation": ["Group 3 (Triazoles)", "Group M01 (Copper)", "Group M05 (Chlorothalonil)"]
+    },
+    "2935-502": {
+        "trade_name": "Kumulus DF (Micronized Sulfur)",
+        "active_ingredient": "Sulfur (80.0%)",
+        "epa_reg_no": "2935-502",
+        "barcode": "029355020088",
+        "frac_group": "Group M02 (Inorganic Sulfur - Multi-Site)",
+        "mode_of_action": "Disrupts multi-site electron transport and fungal respiration",
+        "resistance_risk": "LOW (Zero known resistance after centuries of use)",
+        "signal_word": "CAUTION",
+        "max_annual_apps": 8,
+        "rainfast_hours": 4.0,
+        "rei_hours": 24,
+        "phi_days": 1,
+        "pollinator_safety": "Non-toxic to honeybees",
+        "restricted_mixes": ["Strictly DO NOT combine with or apply within 30 days of horticultural or neem oils"],
+        "recommended_rotation": ["Group 11 (Strobilurin)", "Group 3 (Triazole)", "Group 44 (Biofungicide)"]
     }
 }
 
@@ -280,3 +345,49 @@ def evaluate_seasonal_rotation_plan(applied_products: list) -> dict:
         "history": resolved_history,
         "recommendation": rec_text
     }
+
+
+def filter_chemicals(
+    frac_group: str = None,
+    max_rei_hours: int = None,
+    max_phi_days: int = None,
+    pollinator_safe_only: bool = False,
+    max_resistance_risk: str = None
+) -> list:
+    """
+    Filters registered EPA chemical formulations by FRAC mode of action group,
+    REI reentry interval, PHI harvest safety, pollinator toxicity, and resistance risk.
+    """
+    results = []
+    
+    for _, item in EPA_REGISTRATION_REGISTRY.items():
+        # 1. Filter by FRAC group (substring match)
+        if frac_group and frac_group.strip() and frac_group.lower() not in item["frac_group"].lower():
+            continue
+            
+        # 2. Filter by max REI
+        if max_rei_hours is not None and item.get("rei_hours", 24) > max_rei_hours:
+            continue
+            
+        # 3. Filter by max PHI
+        if max_phi_days is not None and item.get("phi_days", 14) > max_phi_days:
+            continue
+            
+        # 4. Filter by pollinator safety
+        if pollinator_safe_only:
+            poll_text = item.get("pollinator_safety", "").lower()
+            if not ("bee safe" in poll_text or "non-toxic" in poll_text or "low toxicity" in poll_text or "virtually non-toxic" in poll_text):
+                continue
+                
+        # 5. Filter by resistance risk
+        if max_resistance_risk:
+            risk = item.get("resistance_risk", "MEDIUM").upper()
+            req = max_resistance_risk.strip().upper()
+            if req == "LOW" and ("HIGH" in risk or "MEDIUM" in risk):
+                continue
+            elif req == "MEDIUM" and "HIGH" in risk:
+                continue
+                
+        results.append(item)
+        
+    return results
