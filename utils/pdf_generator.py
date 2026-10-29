@@ -46,9 +46,9 @@ def create_probability_chart(probabilities, temp_dir):
     plt.close()
     return chart_path
 
-def generate_pdf_report(original_img, heatmap_img, prediction_data, disease_info, cv_analysis=None):
+def generate_pdf_report(original_img, heatmap_img, prediction_data, disease_info, cv_analysis=None, epidemiology_data=None, spectral_analysis=None):
     """
-    Generates a PDF report for a prediction.
+    Generates an enterprise PDF diagnostic report for a prediction.
     
     Args:
         original_img: PIL Image of the uploaded leaf.
@@ -56,6 +56,8 @@ def generate_pdf_report(original_img, heatmap_img, prediction_data, disease_info
         prediction_data: dict containing prediction results.
         disease_info: dict containing disease information.
         cv_analysis: optional dict containing real CV damage metrics and overlay image.
+        epidemiology_data: optional dict containing incubation and vector transmission.
+        spectral_analysis: optional dict containing GLI/VARI/TGI and SPAD chlorophyll indices.
         
     Returns:
         str: Path to the generated PDF file.
@@ -88,6 +90,12 @@ def generate_pdf_report(original_img, heatmap_img, prediction_data, disease_info
         pdf.cell(0, 6, f'Status: {status} (AI Confidence: {prediction_data["confidence"] * 100:.2f}%)', 0, 1)
         if cv_analysis:
             pdf.cell(0, 6, f'Photosynthetic Canopy Integrity: {100.0 - cv_analysis.get("damage_percentage", 0.0):.1f}% Healthy Lamina', 0, 1)
+            
+    if spectral_analysis:
+        pdf.set_text_color(5, 150, 105)
+        pdf.cell(0, 6, f'Spectral Chlorophyll Proxy: {spectral_analysis.get("spad_chlorophyll_proxy", 0.0)} SPAD ({spectral_analysis.get("chlorophyll_status", "Normal")})', 0, 1)
+        pdf.set_text_color(71, 85, 105)
+        pdf.cell(0, 6, f'Spectral Indices: GLI {spectral_analysis.get("mean_gli", 0.0):+.3f} | VARI {spectral_analysis.get("mean_vari", 0.0):+.3f} | Active Lamina: {spectral_analysis.get("photosynthetic_efficiency_pct", 100.0)}%', 0, 1)
         
     pdf.set_text_color(0, 0, 0)
     
@@ -188,6 +196,30 @@ def generate_pdf_report(original_img, heatmap_img, prediction_data, disease_info
         add_presc_section("Status & Action Urgency:", urgency, title_color=(220, 38, 38))
         add_presc_section("Pathology Overview:", disease_info.get("description", "N/A"))
         add_presc_section("Key Visual Symptoms:", disease_info.get("symptoms", "N/A"))
+        
+        if epidemiology_data:
+            inc_min = epidemiology_data.get("incubation_days_min", 0)
+            inc_max = epidemiology_data.get("incubation_days_max", 0)
+            inc_str = f"{inc_min} to {inc_max} Days" if inc_max > 0 else "N/A"
+            vectors_str = ", ".join(epidemiology_data.get("primary_vectors", ["N/A"]))
+            insects_str = ", ".join(epidemiology_data.get("vector_carrier_insects", ["None"]))
+            spread_str = epidemiology_data.get("secondary_spread_rate", "Moderate")
+            epi_text = (
+                f"Latent Incubation Period: {inc_str}\n"
+                f"Primary Dispersal Vectors: {vectors_str}\n"
+                f"Carrier Insect Pests: {insects_str}\n"
+                f"Secondary Spread Dynamics: {spread_str}\n"
+                f"Susceptible Stage: {epidemiology_data.get('host_susceptibility_stage', 'All stages')}"
+            )
+            add_presc_section("Pathology Vectors & Incubation Dynamics:", epi_text, title_color=(124, 58, 237))
+            
+            quarantine = epidemiology_data.get("quarantine_measures", [])
+            if quarantine:
+                add_presc_section("Biosecurity Quarantine & Sanitation Checklist:", quarantine, title_color=(185, 28, 28))
+                
+        if spectral_analysis:
+            add_presc_section("Foliar Chlorophyll & Vegetative Vigor Diagnostic:", spectral_analysis.get("diagnostic_desc", "Normal photosynthesis."), title_color=(5, 150, 105))
+            
         add_presc_section("Environmental Triggers & Causes:", disease_info.get("causes", "N/A"))
         add_presc_section("Immediate Containment Steps (First-Aid):", disease_info.get("immediate_actions", "N/A"), title_color=(185, 28, 28))
         add_presc_section("Organic & Bio-Control Remedies:", disease_info.get("organic_treatment", "N/A"), title_color=(5, 150, 105))
@@ -196,6 +228,8 @@ def generate_pdf_report(original_img, heatmap_img, prediction_data, disease_info
         add_presc_section("Nutrition & Soil Care:", disease_info.get("nutrition_and_care", "N/A"))
     else:
         add_presc_section("Status Overview:", "Plant exhibits high vigor, robust cellular structure, and no active foliar infections.", title_color=(5, 150, 105))
+        if spectral_analysis:
+            add_presc_section("Spectral Chlorophyll Vigor:", f"SPAD Equivalent: {spectral_analysis.get('spad_chlorophyll_proxy', 0.0)} ({spectral_analysis.get('chlorophyll_status', 'Optimal')}) - {spectral_analysis.get('diagnostic_desc', 'Healthy photosynthesis.')}", title_color=(5, 150, 105))
         add_presc_section("Key Health Indicators:", disease_info.get("symptoms", "Healthy green foliage, crisp veins, intact cuticle barrier."))
         add_presc_section("Routine Maintenance & Scouting:", disease_info.get("immediate_actions", "Continue bi-weekly leaf inspections."))
         add_presc_section("Proactive Bio-Protection:", disease_info.get("organic_treatment", "Apply organic foliar feeds to maintain immune resilience."))
