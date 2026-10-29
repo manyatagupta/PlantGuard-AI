@@ -7,20 +7,28 @@ to calculate quantitative recovery rate, lesion reduction, and treatment efficac
 import cv2
 import numpy as np
 from PIL import Image
-from utils.leaf_cv import analyze_leaf_damage
+from utils.leaf_cv import analyze_leaf_damage, calculate_canopy_spectral_indices
 
 def evaluate_treatment_recovery(image_before, image_after) -> dict:
     """
-    Analyzes before and after specimen scans, calculating healing progress.
+    Analyzes before and after specimen scans, calculating healing progress
+    including foliar necrosis reduction and chlorophyll re-greening (SPAD delta).
     """
     analysis_before = analyze_leaf_damage(image_before)
     analysis_after = analyze_leaf_damage(image_after)
+    
+    spectral_before = calculate_canopy_spectral_indices(image_before)
+    spectral_after = calculate_canopy_spectral_indices(image_after)
     
     dmg_before = analysis_before["damage_percentage"]
     dmg_after = analysis_after["damage_percentage"]
     
     lesions_before = analysis_before["lesion_count"]
     lesions_after = analysis_after["lesion_count"]
+    
+    spad_before = spectral_before["spad_chlorophyll_proxy"]
+    spad_after = spectral_after["spad_chlorophyll_proxy"]
+    delta_spad = round(spad_after - spad_before, 1)
     
     delta_damage = round(dmg_before - dmg_after, 1)
     
@@ -73,6 +81,9 @@ def evaluate_treatment_recovery(image_before, image_after) -> dict:
         "stage_after": analysis_after["stage_label"],
         "lesions_before": lesions_before,
         "lesions_after": lesions_after,
+        "spad_before": spad_before,
+        "spad_after": spad_after,
+        "delta_spad": delta_spad,
         "delta_damage": delta_damage,
         "recovery_pct": recovery_pct,
         "status": status,
@@ -80,5 +91,7 @@ def evaluate_treatment_recovery(image_before, image_after) -> dict:
         "guidance": guidance,
         "composite_image": composite_pil,
         "analysis_before": analysis_before,
-        "analysis_after": analysis_after
+        "analysis_after": analysis_after,
+        "spectral_before": spectral_before,
+        "spectral_after": spectral_after
     }
