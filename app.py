@@ -27,7 +27,7 @@ from utils.dosage_calculator import (
     TREATMENT_DATABASE, check_tank_mix_compatibility, get_jar_test_protocol,
     calculate_spray_drift_and_nozzle_specs, get_available_nozzle_types, AVAILABLE_NOZZLE_TYPES
 )
-from utils.leaf_cv import analyze_leaf_damage
+from utils.leaf_cv import analyze_leaf_damage, calculate_canopy_spectral_indices, estimate_physical_leaf_dimensions
 from utils.agronomy_brain import query_agronomy_brain, SUGGESTED_QUESTIONS
 from utils.crop_calendar import get_crop_calendar, PHENOLOGY_CALENDAR
 from utils.cost_estimator import (
@@ -629,8 +629,8 @@ def main():
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    # 4 KPI Cards
-                    col_k1, col_k2, col_k3, col_k4 = st.columns(4)
+                    # 5 KPI Cards
+                    col_k1, col_k2, col_k3, col_k4, col_k5 = st.columns(5)
                     with col_k1:
                         st.markdown(f"""
                         <div class='metric-card'>
@@ -660,13 +660,30 @@ def main():
                         <div class='metric-card'>
                             <div class='metric-title'>Active Lesion Count</div>
                             <div class='metric-value' style='font-size: 2.2rem;'>{rec["lesions_before"]} → {rec["lesions_after"]}</div>
-                            <div style='color: #94a3b8; font-size: 0.85rem;'>Individual Infection Spots</div>
+                            <div style='color: #94a3b8; font-size: 0.85rem;'>Individual Spots</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    with col_k5:
+                        spad_color = "#10b981" if rec.get("delta_spad", 0) >= 0 else "#f87171"
+                        st.markdown(f"""
+                        <div class='metric-card'>
+                            <div class='metric-title'>Chlorophyll Re-Greening</div>
+                            <div class='metric-value' style='font-size: 2.2rem; color:{spad_color};'>{rec.get('delta_spad', 0.0):+0.1f}</div>
+                            <div style='color: #94a3b8; font-size: 0.85rem;'>SPAD {rec.get('spad_before', 0)} → {rec.get('spad_after', 0)}</div>
                         </div>
                         """, unsafe_allow_html=True)
 
                     st.markdown("<br>", unsafe_allow_html=True)
                     st.markdown("#### 🔬 Computer Vision Dual Overlay Comparison")
                     st.image(rec["composite_image"], caption="Left: Baseline Lesion Detection (Red Mask) | Right: Post-Treatment Foliar Surface", use_column_width=True)
+                    
+                    if "spectral_before" in rec and "spectral_after" in rec:
+                        with st.expander("🌿 Spectral Chlorophyll Dual-Map Comparison (Viridis)", expanded=False):
+                            col_sp1, col_sp2 = st.columns(2)
+                            with col_sp1:
+                                st.image(rec["spectral_before"]["spectral_map"], caption=f"Baseline Spectral Map: SPAD {rec['spad_before']} ({rec['spectral_before']['chlorophyll_status']})", use_column_width=True)
+                            with col_sp2:
+                                st.image(rec["spectral_after"]["spectral_map"], caption=f"Post-Treatment Spectral Map: SPAD {rec['spad_after']} ({rec['spectral_after']['chlorophyll_status']})", use_column_width=True)
         else:
             st.info("👆 Please upload or load both Baseline and Follow-up leaf images above to perform healing evaluation.")
         return
@@ -2201,8 +2218,18 @@ def main():
                                 superimposed_img = jet * 0.45 + original_img_arr * 0.55
                                 heatmap_img = np.clip(superimposed_img, 0, 255).astype(np.uint8)
                             
-                            # Generate Enhanced PDF with CV Analysis
-                            pdf_path = generate_pdf_report(image, heatmap_img, results, info, cv_analysis=cv_analysis)
+                            # Compute Spectral & Physical Dimension Metrics
+                            spectral_res = calculate_canopy_spectral_indices(image)
+                            phys_dim = estimate_physical_leaf_dimensions(image)
+
+                            # Generate Enhanced PDF with CV and Spectral Analysis
+                            epi_data = get_disease_epidemiology_profile(results['predicted_class'])
+                            pdf_path = generate_pdf_report(
+                                image, heatmap_img, results, info, 
+                                cv_analysis=cv_analysis,
+                                epidemiology_data=epi_data,
+                                spectral_analysis=spectral_res
+                            )
                             with open(pdf_path, "rb") as f:
                                 st.download_button(
                                     label="📄 Download Diagnostic PDF Report",
@@ -2217,9 +2244,10 @@ def main():
                             
                             # Visual Tabs for Inspection
                             st.markdown("#### 🔬 Detailed Visual & Pathological Inspection")
-                            vtab1, vtab2, vtab3 = st.tabs([
+                            vtab1, vtab2, vtab3, vtab4 = st.tabs([
                                 "🧠 AI Focus (Grad-CAM)",
                                 "🔬 CV Lesion Segmentation",
+                                "🌿 Spectral Chlorophyll & Biometrics",
                                 "📊 Probabilities"
                             ])
                             
@@ -2234,6 +2262,27 @@ def main():
                                 st.info(f"**Biological Severity Assessment:** {cv_analysis['field_advice']}")
                                 
                             with vtab3:
+                                col_vm1, col_vm2 = st.columns([1, 1.2], gap="medium")
+                                with col_vm1:
+                                    st.image(spectral_res["spectral_map"], caption="False-Color Viridis Chlorophyll Density Map (Yellow: Active chloroplasts | Purple/Blue: Senescent/chlorotic tissue)", use_column_width=True)
+                                with col_vm2:
+                                    st.markdown(f"##### 🌿 Multispectral Chlorophyll & Physical Dimensions")
+                                    st.markdown(f"**SPAD Chlorophyll Proxy:** <span style='color:{spectral_res['status_color']}; font-weight:800; font-size:1.2rem;'>{spectral_res['spad_chlorophyll_proxy']} / 80</span> — `{spectral_res['chlorophyll_status']}`", unsafe_allow_html=True)
+                                    st.caption(spectral_res["diagnostic_desc"])
+                                    
+                                    col_sm1, col_sm2 = st.columns(2)
+                                    with col_sm1:
+                                        st.markdown(f"**Green Leaf Index (GLI):** `{spectral_res['mean_gli']:+.3f}`")
+                                        st.markdown(f"**Vegetative Index (VARI):** `{spectral_res['mean_vari']:+.3f}`")
+                                        st.markdown(f"**Triangular Greenness (TGI):** `{spectral_res['mean_tgi']}`")
+                                    with col_sm2:
+                                        st.markdown(f"**Photosynthetic Lamina:** `{spectral_res['photosynthetic_efficiency_pct']}%`")
+                                        st.markdown(f"**Leaf Surface Area:** `~{phys_dim['leaf_area_cm2']} cm²`")
+                                        st.markdown(f"**Absolute Lesion Area:** `~{phys_dim['lesion_area_cm2']} cm² ({phys_dim['lesion_area_mm2']} mm²)`")
+                                        
+                                    st.caption(f"Estimated Dimensions: {phys_dim['leaf_length_cm']} cm length × {phys_dim['leaf_width_cm']} cm width • Aspect Ratio: {phys_dim['aspect_ratio']} • Circularity: {phys_dim['circularity_form_factor']}")
+                                
+                            with vtab4:
                                 st.markdown("##### 🔬 Top Differential Diagnoses:")
                                 if results.get("top_3"):
                                     for t_rank, t_item in enumerate(results["top_3"], 1):
