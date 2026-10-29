@@ -306,3 +306,74 @@ def calculate_canopy_spectral_indices(image_input) -> dict:
     }
 
 
+def estimate_physical_leaf_dimensions(
+    image_input,
+    assumed_dpi: float = 96.0,
+    reference_scale_mm_per_pixel: float = None
+) -> dict:
+    """
+    Computes true physical leaf lamina dimensions, perimeter, circularity form factor,
+    and absolute diseased lesion surface area in cm² and mm².
+    """
+    damage_analysis = analyze_leaf_damage(image_input)
+    
+    if isinstance(image_input, Image.Image):
+        img_np = np.array(image_input.convert("RGB"))
+    else:
+        img_np = np.array(image_input).copy()
+        
+    h, w = img_np.shape[:2]
+    
+    # Determine mm per pixel conversion factor
+    if reference_scale_mm_per_pixel and reference_scale_mm_per_pixel > 0:
+        mm_per_pixel = reference_scale_mm_per_pixel
+    else:
+        # 1 inch = 25.4 mm. At assumed_dpi (default 96 DPI):
+        mm_per_pixel = 25.4 / float(assumed_dpi)
+        
+    sq_mm_per_pixel = mm_per_pixel * mm_per_pixel
+    sq_cm_per_pixel = sq_mm_per_pixel / 100.0
+    
+    total_leaf_pixels = damage_analysis["total_leaf_pixels"]
+    infected_pixels = damage_analysis["infected_pixels"]
+    
+    physical_leaf_area_cm2 = round(total_leaf_pixels * sq_cm_per_pixel, 2)
+    physical_lesion_area_cm2 = round(infected_pixels * sq_cm_per_pixel, 2)
+    physical_lesion_area_mm2 = round(infected_pixels * sq_mm_per_pixel, 1)
+    
+    # Estimate bounding box physical length and width
+    leaf_mask = np.array(damage_analysis["mask_image"])
+    # Find bounding box
+    contours, _ = cv2.findContours(leaf_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if contours:
+        x, y, bw, bh = cv2.boundingRect(np.vstack(contours))
+        leaf_length_cm = round(bh * (mm_per_pixel / 10.0), 1)
+        leaf_width_cm = round(bw * (mm_per_pixel / 10.0), 1)
+        aspect_ratio = round(float(bh) / max(1.0, float(bw)), 2)
+        perimeter_cm = round(sum(cv2.arcLength(c, True) for c in contours) * (mm_per_pixel / 10.0), 1)
+        
+        # Circularity form factor: 4 * pi * Area / (Perimeter^2)
+        total_p_pixels = sum(cv2.arcLength(c, True) for c in contours)
+        circularity = round((4.0 * np.pi * max(1, total_leaf_pixels)) / max(1.0, total_p_pixels ** 2), 2)
+    else:
+        leaf_length_cm = round(h * (mm_per_pixel / 10.0), 1)
+        leaf_width_cm = round(w * (mm_per_pixel / 10.0), 1)
+        aspect_ratio = 1.0
+        perimeter_cm = 0.0
+        circularity = 1.0
+        
+    return {
+        "leaf_area_cm2": physical_leaf_area_cm2,
+        "lesion_area_cm2": physical_lesion_area_cm2,
+        "lesion_area_mm2": physical_lesion_area_mm2,
+        "leaf_length_cm": leaf_length_cm,
+        "leaf_width_cm": leaf_width_cm,
+        "aspect_ratio": aspect_ratio,
+        "perimeter_cm": perimeter_cm,
+        "circularity_form_factor": circularity,
+        "damage_percentage": damage_analysis["damage_percentage"],
+        "severity_grade": damage_analysis["stage_label"]
+    }
+
+
+
