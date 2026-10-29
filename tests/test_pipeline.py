@@ -13,7 +13,11 @@ from PIL import Image
 # Ensure project root is in sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from utils.leaf_cv import analyze_leaf_damage
+from utils.leaf_cv import (
+    analyze_leaf_damage,
+    calculate_canopy_spectral_indices,
+    estimate_physical_leaf_dimensions,
+)
 from utils.cost_estimator import estimate_treatment_economics, DEFAULT_PRODUCT_PRICING
 from utils.recovery_tracker import evaluate_treatment_recovery
 from utils.weather_risk import calculate_disease_outbreak_risk, get_regional_monitoring_stations
@@ -655,6 +659,73 @@ class TestChemicalCatalogFiltering(unittest.TestCase):
         self.assertGreaterEqual(len(harvest_ready), 3)
         for prod in harvest_ready:
             self.assertLessEqual(prod["phi_days"], 1)
+
+
+class TestSpectralVegetativeAndPhysicalLeafCV(unittest.TestCase):
+    """Tests for multispectral chlorophyll indices, physical leaf dimensions, and recovery tracking."""
+
+    def test_spectral_indices_healthy_vs_necrotic(self):
+        # 1. Healthy green leaf image
+        green_arr = np.zeros((150, 150, 3), dtype=np.uint8)
+        green_arr[:, :] = [34, 180, 34]  # High green channel
+        green_img = Image.fromarray(green_arr)
+        green_metrics = calculate_canopy_spectral_indices(green_img)
+
+        self.assertIn("mean_gli", green_metrics)
+        self.assertIn("spad_chlorophyll_proxy", green_metrics)
+        self.assertIn("spectral_map", green_metrics)
+        self.assertGreater(green_metrics["mean_gli"], 0.05)
+        self.assertGreater(green_metrics["spad_chlorophyll_proxy"], 25.0)
+        self.assertIn(green_metrics["chlorophyll_status"], ["Optimal / High Nitrogen Vigor", "Moderate / Normal Vegetative"])
+
+        # 2. Severely chlorotic/brown tissue
+        brown_arr = np.zeros((150, 150, 3), dtype=np.uint8)
+        brown_arr[:, :] = [180, 100, 40]  # High red, low green
+        brown_img = Image.fromarray(brown_arr)
+        brown_metrics = calculate_canopy_spectral_indices(brown_img)
+
+        self.assertLess(brown_metrics["mean_gli"], green_metrics["mean_gli"])
+        self.assertLess(brown_metrics["spad_chlorophyll_proxy"], green_metrics["spad_chlorophyll_proxy"])
+
+    def test_estimate_physical_leaf_dimensions(self):
+        # Synthetic green leaf with a central lesion
+        img_arr = np.zeros((200, 200, 3), dtype=np.uint8)
+        img_arr[30:170, 40:160] = [34, 139, 34]  # Leaf region
+        img_arr[80:120, 80:120] = [139, 69, 19]  # Lesion region
+        pil_img = Image.fromarray(img_arr)
+
+        dims = estimate_physical_leaf_dimensions(pil_img, assumed_dpi=96)
+        self.assertIn("leaf_area_cm2", dims)
+        self.assertIn("lesion_area_cm2", dims)
+        self.assertIn("lesion_area_mm2", dims)
+        self.assertIn("leaf_length_cm", dims)
+        self.assertIn("aspect_ratio", dims)
+        self.assertIn("circularity_form_factor", dims)
+
+        self.assertGreater(dims["leaf_area_cm2"], 0.0)
+        self.assertGreater(dims["lesion_area_cm2"], 0.0)
+        self.assertGreater(dims["lesion_area_mm2"], 0.0)
+        self.assertGreater(dims["leaf_length_cm"], 0.0)
+
+    def test_recovery_tracker_spectral_regreening(self):
+        # Day 0 (severe damage, brown spots)
+        before_arr = np.zeros((150, 150, 3), dtype=np.uint8)
+        before_arr[:, :] = [120, 100, 50]  # Stressed leaf
+        before_img = Image.fromarray(before_arr)
+
+        # Day 14 (recovered, lush green)
+        after_arr = np.zeros((150, 150, 3), dtype=np.uint8)
+        after_arr[:, :] = [30, 180, 40]  # Healthy green
+        after_img = Image.fromarray(after_arr)
+
+        recovery = evaluate_treatment_recovery(before_img, after_img)
+        self.assertIn("delta_spad", recovery)
+        self.assertIn("spad_before", recovery)
+        self.assertIn("spad_after", recovery)
+        self.assertIn("spectral_before", recovery)
+        self.assertIn("spectral_after", recovery)
+        self.assertGreater(recovery["delta_spad"], 0.0)
+        self.assertGreater(recovery["spad_after"], recovery["spad_before"])
 
 
 if __name__ == "__main__":
