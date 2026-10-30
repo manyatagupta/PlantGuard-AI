@@ -161,6 +161,14 @@ class TestCropCalendar(unittest.TestCase):
                 self.assertIn("threats", stage)
                 self.assertIn("preventive_spray", stage)
 
+    def test_phenology_stage_by_gdd(self):
+        from utils.crop_calendar import get_phenology_stage_by_gdd
+        stage_info = get_phenology_stage_by_gdd("Apple", cumulative_gdd=185.0)
+        self.assertEqual(stage_info["crop"], "Apple")
+        self.assertIn("Pink Bud", stage_info["stage_name"])
+        self.assertGreater(len(stage_info["threats"]), 0)
+        self.assertGreaterEqual(stage_info["gdd_to_next_stage"], 0.0)
+
 
 class TestDosageCalculator(unittest.TestCase):
     """Tests for carrier volume and active ingredient calculations."""
@@ -726,6 +734,85 @@ class TestSpectralVegetativeAndPhysicalLeafCV(unittest.TestCase):
         self.assertIn("spectral_after", recovery)
         self.assertGreater(recovery["delta_spad"], 0.0)
         self.assertGreater(recovery["spad_after"], recovery["spad_before"])
+
+
+class TestPathogenPhenologyAndThermalGDD(unittest.TestCase):
+    """Tests for Growing Degree Day (GDD) accumulation and pathogen biofix phenology models."""
+
+    def test_daily_gdd_calculation(self):
+        from utils.gdd_phenology import calculate_daily_gdd
+        # Standard average: (22 + 10) / 2 - 10 = 6.0
+        gdd = calculate_daily_gdd(t_max=22.0, t_min=10.0, base_temp=10.0, cap_temp=30.0)
+        self.assertEqual(gdd, 6.0)
+
+        # Cold day below base: (8 + 4) / 2 - 10 = -4 -> 0.0
+        cold_gdd = calculate_daily_gdd(t_max=8.0, t_min=4.0, base_temp=10.0)
+        self.assertEqual(cold_gdd, 0.0)
+
+        # Hot day capped at 30: (30 + 18) / 2 - 10 = 14.0
+        capped_gdd = calculate_daily_gdd(t_max=38.0, t_min=18.0, base_temp=10.0, cap_temp=30.0)
+        self.assertEqual(capped_gdd, 14.0)
+
+    def test_cumulative_gdd_series(self):
+        from utils.gdd_phenology import calculate_cumulative_gdd_series
+        records = [
+            {"date": "2026-04-01", "t_max": 20.0, "t_min": 10.0},
+            {"date": "2026-04-02", "t_max": 22.0, "t_min": 12.0},
+            {"date": "2026-04-03", "t_max": 18.0, "t_min": 8.0}
+        ]
+        res = calculate_cumulative_gdd_series(records, base_temp=10.0)
+        self.assertEqual(res["days_accumulated"], 3)
+        self.assertGreater(res["total_cumulative_gdd"], 10.0)
+        self.assertEqual(len(res["series"]), 3)
+        self.assertEqual(res["series"][-1]["cumulative_gdd"], res["total_cumulative_gdd"])
+
+    def test_pathogen_phenology_apple_scab(self):
+        from utils.gdd_phenology import evaluate_pathogen_phenology
+        # Early stage
+        early = evaluate_pathogen_phenology("Apple Scab", cumulative_gdd=25.0)
+        self.assertIn("Dormant", early["stage"])
+        self.assertEqual(early["base_temp_c"], 0.0)
+
+        # Peak ascospore discharge window
+        peak = evaluate_pathogen_phenology("Apple Scab", cumulative_gdd=195.0)
+        self.assertIn("Accelerated Ascospore Discharge", peak["stage"])
+        self.assertIn("Critical Primary Alert", peak["risk_level"])
+        self.assertGreater(peak["stage_progress_pct"], 0.0)
+        self.assertGreater(peak["gdd_to_next_stage"], 0.0)
+
+    def test_pathogen_phenology_tomato_early_blight_fast(self):
+        from utils.gdd_phenology import evaluate_pathogen_phenology
+        # 300 GDD FAST threshold
+        fast = evaluate_pathogen_phenology("Tomato Early Blight", cumulative_gdd=320.0)
+        self.assertIn("FAST Critical Action Threshold", fast["stage"])
+        self.assertIn("High Treatment Trigger", fast["risk_level"])
+        self.assertIn("Mancozeb", fast["action_advisory"])
+
+    def test_weather_risk_with_gdd_integration(self):
+        from utils.weather_risk import calculate_disease_outbreak_risk
+        res = calculate_disease_outbreak_risk(
+            temp=19.0,
+            humidity=92.0,
+            rainfall=6.0,
+            leaf_wetness=10.0,
+            wind_speed=12.0,
+            crop_filter="Apple",
+            cumulative_gdd=195.0
+        )
+        self.assertGreaterEqual(len(res["diseases"]), 1)
+        apple_disease = res["diseases"][0]
+        self.assertIn("phenology", apple_disease)
+        self.assertEqual(apple_disease["phenology"]["cumulative_gdd"], 195.0)
+        self.assertIn("Peak Inoculum", apple_disease["phenology"]["stage"])
+
+    def test_upcoming_milestones_projection(self):
+        from utils.gdd_phenology import estimate_upcoming_milestones
+        milestones = estimate_upcoming_milestones("Apple Scab", current_gdd=80.0, projected_daily_gdd=10.0)
+        self.assertGreater(len(milestones), 0)
+        first_next = milestones[0]
+        self.assertGreater(first_next["days_remaining"], 0)
+        self.assertIn("target_gdd", first_next)
+        self.assertIn("projected_date", first_next)
 
 
 if __name__ == "__main__":
