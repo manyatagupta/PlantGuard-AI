@@ -7,6 +7,7 @@ Uses established epidemiological criteria (e.g., Mills Scab Periods, Wallin/Smit
 
 import requests
 import datetime
+from utils.gdd_phenology import evaluate_pathogen_phenology, PATHOGEN_PHENOLOGY_MODELS
 
 # Preset Climates for quick simulation
 WEATHER_PRESETS = {
@@ -129,10 +130,12 @@ def calculate_disease_outbreak_risk(
     rainfall: float,
     leaf_wetness: float,
     wind_speed: float,
-    crop_filter: str = "All Crops"
+    crop_filter: str = "All Crops",
+    cumulative_gdd: float = None
 ) -> dict:
     """
-    Evaluates microclimate parameters against known plant pathogen criteria.
+    Evaluates microclimate parameters against known plant pathogen criteria,
+    optionally modulated by cumulative Growing Degree Day (GDD) phenological development.
     Returns risk breakdown per disease, overall threat index, and agronomic countermeasures.
     """
     diseases = [
@@ -266,6 +269,16 @@ def calculate_disease_outbreak_risk(
         # Scale score to 0 - 100%
         score = min(100.0, max(2.0, raw_score * 100.0))
         
+        # Apply GDD phenological adjustment if cumulative thermal time is provided
+        pheno_info = None
+        if cumulative_gdd is not None:
+            pheno_info = evaluate_pathogen_phenology(d["name"], cumulative_gdd)
+            # Modulate risk by life-cycle susceptibility
+            if "Critical" in pheno_info["risk_level"] or "High" in pheno_info["risk_level"]:
+                score = min(100.0, score * 1.2 + 8.0)
+            elif "Low" in pheno_info["risk_level"]:
+                score = max(5.0, score * 0.75)
+        
         if score >= 75.0:
             level = "Severe / Critical"
             badge_color = "#ef4444"
@@ -283,7 +296,7 @@ def calculate_disease_outbreak_risk(
             badge_color = "#10b981"
             icon = "🟢"
             
-        analyzed_diseases.append({
+        disease_entry = {
             "name": d["name"],
             "crops": d["crops"],
             "pathogen_type": d["pathogen_type"],
@@ -294,7 +307,11 @@ def calculate_disease_outbreak_risk(
             "optimum": d["optimum"],
             "advice": d["advice"],
             "emergency": d["emergency"]
-        })
+        }
+        if pheno_info:
+            disease_entry["phenology"] = pheno_info
+            
+        analyzed_diseases.append(disease_entry)
         
     # Sort diseases by highest risk score first
     analyzed_diseases.sort(key=lambda x: x["score"], reverse=True)
