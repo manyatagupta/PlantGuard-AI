@@ -49,6 +49,11 @@ from utils.sensor_telemetry import (
     simulate_multizone_farm_telemetry, calculate_dew_point, calculate_absolute_humidity
 )
 from utils.batch_scanner import process_leaf_batch, generate_batch_csv_summary
+from utils.gdd_phenology import (
+    calculate_daily_gdd, calculate_cumulative_gdd_series,
+    evaluate_pathogen_phenology, estimate_upcoming_milestones,
+    get_supported_phenology_models, PATHOGEN_PHENOLOGY_MODELS
+)
 import pydeck as pdk
 import pandas as pd
 import datetime
@@ -333,6 +338,7 @@ def main():
                 "🧪 Abiotic Nutrient Diagnostic Matrix",
                 "📡 IoT Microclimate & VPD Telemetry",
                 "🌦️ Disease Risk Forecaster", 
+                "🌡️ Pathogen Phenology & Degree-Day Engine",
                 "⚖️ Spray & Dosage Calculator",
                 "📅 Seasonal Spray Calendar",
                 "📊 Analytics Dashboard", 
@@ -1432,11 +1438,18 @@ def main():
         with col_m5:
             st.metric("💨 Wind Speed", f"{w['wind_speed']} km/h")
             
-        # Target Crop Filter
+        # Target Crop Filter & GDD Thermal Time
         st.markdown("---")
-        col_cf, _ = st.columns([2, 2])
+        col_cf, col_gdd = st.columns([1.5, 2.5])
         with col_cf:
             crop_choice = st.selectbox("🌱 Focus on Host Crop:", ["All Crops", "Apple", "Corn (Maize)", "Bell Pepper", "Potato", "Tomato"])
+        with col_gdd:
+            enable_gdd = st.checkbox("🌡️ Modulate Outbreak Threat by Pathogen GDD Phenology Stage", value=True)
+            if enable_gdd:
+                farm_gdd = st.slider("Cumulative GDD from Biofix (Thermal Time):", min_value=0.0, max_value=800.0, value=195.0, step=5.0)
+                st.session_state["farm_cumulative_gdd"] = farm_gdd
+            else:
+                farm_gdd = None
 
         # Calculate Outbreak Risk
         analysis = calculate_disease_outbreak_risk(
@@ -1445,7 +1458,8 @@ def main():
             rainfall=w["rainfall"],
             leaf_wetness=w["leaf_wetness"],
             wind_speed=w["wind_speed"],
-            crop_filter=crop_choice
+            crop_filter=crop_choice,
+            cumulative_gdd=farm_gdd
         )
         
         # Overall Biosecurity Card
@@ -1486,6 +1500,11 @@ def main():
                 with col_d2:
                     st.markdown(f"**Threat Severity:** <span style='color:{d['badge_color']}; font-weight:700;'>{d['level']}</span>", unsafe_allow_html=True)
                     st.warning(f"**Emergency Alert:** {d['emergency']}")
+                    
+                if d.get("phenology"):
+                    p = d["phenology"]
+                    st.markdown(f"**🌡️ GDD Phenological Stage:** <span style='color:{p['risk_color']}; font-weight:700;'>{p['stage']}</span> ({p['cumulative_gdd']} GDD) • Inoculum Ripening: `{p['ascospore_maturation_pct']}`", unsafe_allow_html=True)
+                    st.caption(f"**IPM Biological Advisory:** {p['action_advisory']}")
                     
                 st.markdown(f"**🛡️ Pre-emptive Countermeasure:**\n{d['advice']}")
                 
@@ -1548,6 +1567,206 @@ def main():
                 use_container_width=True
             )
                 
+        return
+
+    # Pathogen Phenology & Degree-Day Engine View
+    if page == "🌡️ Pathogen Phenology & Degree-Day Engine":
+        st.title("🌡️ Pathogen Phenology & Growing Degree Day (GDD) Engine")
+        st.markdown("### Physiological thermal time modeling for fungal spore maturation, infection windows, and insect vector emergence.")
+        st.caption("Tracks physiological degree-day accumulation (thermal time) from a verified biofix date to predict biological vulnerability windows (Gadoury & MacHardy, FAST, and Gubler-Thomas models).")
+        
+        col_ctl1, col_ctl2 = st.columns([1.5, 2.5], gap="medium")
+        with col_ctl1:
+            models_list = list(PATHOGEN_PHENOLOGY_MODELS.keys())
+            selected_model = st.selectbox("🔬 Target Pathogen / Pest Model:", models_list)
+            model_info = PATHOGEN_PHENOLOGY_MODELS[selected_model]
+            
+            st.markdown(f"**Host Crop:** `{model_info['crop']}`")
+            st.markdown(f"**Pathogen:** *{model_info['scientific_name']}*")
+            st.markdown(f"**Base Temperature ($T_{{base}}$):** `{model_info['base_temp_c']} °C`")
+            st.markdown(f"**Upper Thermal Cap ($T_{{cap}}$):** `{model_info['cap_temp_c']} °C`")
+            st.markdown(f"**Biofix Trigger Event:** `{model_info['biofix_event']}`")
+            st.caption(f"Standard IPM Model: {model_info['model_reference']}")
+            
+        with col_ctl2:
+            st.markdown("##### ⚙️ Biofix Date & Thermal Accumulation Input")
+            col_b1, col_b2 = st.columns(2)
+            with col_b1:
+                biofix_date = st.date_input("🗓️ Field Biofix Date:", value=datetime.date.today() - datetime.timedelta(days=22))
+            with col_b2:
+                daily_rate = st.slider("📈 Average Daily GDD Rate (°C-days/day):", min_value=3.0, max_value=25.0, value=11.5, step=0.5)
+                
+            # Quick stage presets
+            st.markdown("##### 🧪 Fast-Load Thermal Milestones:")
+            col_p1, col_p2, col_p3 = st.columns(3)
+            loaded_gdd = None
+            if selected_model == "Apple Scab":
+                if col_p1.button("🌱 Early Ripening (65 GDD)", use_container_width=True):
+                    loaded_gdd = 65.0
+                if col_p2.button("🚨 Peak Discharge (195 GDD)", use_container_width=True):
+                    loaded_gdd = 195.0
+                if col_p3.button("🍂 Late Depletion (320 GDD)", use_container_width=True):
+                    loaded_gdd = 320.0
+            elif selected_model == "Tomato Early Blight":
+                if col_p1.button("🌱 Vegetative (75 GDD)", use_container_width=True):
+                    loaded_gdd = 75.0
+                if col_p2.button("🚨 FAST 300 GDD Trigger (315 GDD)", use_container_width=True):
+                    loaded_gdd = 315.0
+                if col_p3.button("🔄 Polycyclic Phase (480 GDD)", use_container_width=True):
+                    loaded_gdd = 480.0
+            else:
+                if col_p1.button("🌱 Early Stage (50 GDD)", use_container_width=True):
+                    loaded_gdd = 50.0
+                if col_p2.button("🚨 Critical Window (210 GDD)", use_container_width=True):
+                    loaded_gdd = 210.0
+                if col_p3.button("🔄 Advanced Cycling (360 GDD)", use_container_width=True):
+                    loaded_gdd = 360.0
+
+            if "active_gdd_input" not in st.session_state:
+                st.session_state["active_gdd_input"] = 195.0
+            if loaded_gdd is not None:
+                st.session_state["active_gdd_input"] = loaded_gdd
+                
+            active_gdd = st.slider(
+                "Cumulative Growing Degree-Days (GDD) since Biofix:",
+                min_value=0.0, max_value=800.0,
+                value=float(st.session_state["active_gdd_input"]),
+                step=5.0,
+                key="gdd_main_slider"
+            )
+            st.session_state["farm_cumulative_gdd"] = active_gdd
+
+        # Evaluate phenology
+        pheno = evaluate_pathogen_phenology(selected_model, active_gdd, biofix_date=str(biofix_date))
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        # 5 Metric Cards
+        col_k1, col_k2, col_k3, col_k4, col_k5 = st.columns(5)
+        with col_k1:
+            st.markdown(f"""
+            <div class='metric-card'>
+                <div class='metric-title'>Thermal Time</div>
+                <div class='metric-value'>{pheno['cumulative_gdd']}</div>
+                <div style='color: #94a3b8; font-size: 0.85rem;'>GDD (Base {pheno['base_temp_c']}°C)</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with col_k2:
+            st.markdown(f"""
+            <div class='metric-card'>
+                <div class='metric-title'>Life-Cycle Stage</div>
+                <div style='font-size: 1.15rem; font-weight: 800; color:{pheno['risk_color']}; line-height:1.2; margin-top:8px;'>{pheno['stage']}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with col_k3:
+            st.markdown(f"""
+            <div class='metric-card'>
+                <div class='metric-title'>Inoculum Status</div>
+                <div style='font-size: 1.25rem; font-weight: 800; color:#f8fafc; margin-top:8px;'>{pheno['ascospore_maturation_pct']}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with col_k4:
+            st.markdown(f"""
+            <div class='metric-card'>
+                <div class='metric-title'>Next Stage In</div>
+                <div class='metric-value' style='font-size: 2.2rem;'>{pheno['gdd_to_next_stage']}</div>
+                <div style='color: #94a3b8; font-size: 0.85rem;'>GDD Remaining</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with col_k5:
+            days_est = max(0, int(math.ceil(pheno['gdd_to_next_stage'] / max(1.0, daily_rate)))) if pheno['gdd_to_next_stage'] > 0 else 0
+            st.markdown(f"""
+            <div class='metric-card'>
+                <div class='metric-title'>Days to Next Stage</div>
+                <div class='metric-value' style='font-size: 2.2rem; color:#38bdf8;'>~{days_est}d</div>
+                <div style='color: #94a3b8; font-size: 0.85rem;'>@ {daily_rate}°C-days/d</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # Action Prescription Banner
+        st.markdown(f"""
+        <div class='disease-card' style='border-color: {pheno['risk_color']}; margin: 15px 0;'>
+            <div style='display: flex; justify-content: space-between; align-items: center;'>
+                <div>
+                    <h3 style='margin:0; color: #f8fafc;'>🛡️ Timed IPM Protection Advisory</h3>
+                    <p style='color: #cbd5e1; margin: 4px 0 0 0;'>Biological intervention protocol aligned with current physiological thermal maturity.</p>
+                </div>
+                <div>
+                    <span style='background:{pheno['risk_color']}22; color:{pheno['risk_color']}; padding:6px 14px; border-radius:999px; font-weight:800; border:1px solid {pheno['risk_color']}; text-transform:uppercase;'>{pheno['risk_level']}</span>
+                </div>
+            </div>
+            <p style='margin: 16px 0 0 0; font-size: 1.05rem; color: #f8fafc; font-weight: 500;'>{pheno['action_advisory']}</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Milestone Timeline Cards
+        st.markdown("#### 🧬 Pathogen Thermal Milestone Sequence")
+        for m_idx, m in enumerate(pheno["all_milestones"]):
+            is_active = (m["stage"] == pheno["stage"])
+            is_past = (active_gdd > m["gdd_max"])
+            
+            card_border = pheno['risk_color'] if is_active else ("#334155" if is_past else "rgba(255,255,255,0.1)")
+            bg_style = "rgba(16, 185, 129, 0.05)" if is_past else ("rgba(239, 68, 68, 0.08)" if is_active else "transparent")
+            badge_icon = "✅ Completed" if is_past else ("📍 ACTIVE CURRENT STAGE" if is_active else "⏳ Upcoming")
+            
+            with st.container():
+                st.markdown(f"""
+                <div style='border: 1px solid {card_border}; border-radius: 12px; padding: 14px 18px; margin-bottom: 10px; background: {bg_style};'>
+                    <div style='display: flex; justify-content: space-between; align-items: center;'>
+                        <div>
+                            <span style='font-size: 0.9rem; font-weight: 700; color: {m["risk_color"]};'>{badge_icon} • {m["gdd_min"]} to {m["gdd_max"]} GDD</span>
+                            <h4 style='margin: 4px 0; color: #f8fafc;'>{m["stage"]}</h4>
+                            <span style='color: #94a3b8; font-size: 0.9rem;'>Inoculum Status: <b>{m["ascospore_maturation_pct"]}</b></span>
+                        </div>
+                        <div style='text-align: right;'>
+                            <span style='color: {m["risk_color"]}; font-weight: 700;'>{m["risk_level"]}</span>
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                if is_active:
+                    st.progress(pheno["stage_progress_pct"] / 100.0)
+                    st.caption(f"Stage Completion: {pheno['stage_progress_pct']}% • {pheno['gdd_to_next_stage']} GDD until transition to next biological phase.")
+
+        # Projected Target Dates Table & 30-Day Curve
+        st.markdown("<br>", unsafe_allow_html=True)
+        col_proj1, col_proj2 = st.columns([1.2, 1], gap="medium")
+        
+        with col_proj1:
+            st.markdown("#### 📅 Projected Developmental Threshold Crossing Dates")
+            upcoming = estimate_upcoming_milestones(selected_model, active_gdd, projected_daily_gdd=daily_rate)
+            if upcoming:
+                proj_df = pd.DataFrame(upcoming)[["stage", "target_gdd", "days_remaining", "projected_date", "risk_level"]].rename(
+                    columns={
+                        "stage": "Developmental Stage",
+                        "target_gdd": "Target GDD",
+                        "days_remaining": "Days Remaining",
+                        "projected_date": "Projected Date",
+                        "risk_level": "Threat Level"
+                    }
+                )
+                st.dataframe(proj_df, use_container_width=True)
+            else:
+                st.success("✅ Pathogen has completed primary developmental stages. Currently in mature secondary cycling.")
+                
+        with col_proj2:
+            st.markdown("#### 📈 Thermal Accumulation Trajectory")
+            # Generate simulated GDD series
+            days_span = 30
+            records = []
+            cur_date = datetime.date.today() - datetime.timedelta(days=days_span)
+            for d_idx in range(days_span):
+                d_date = cur_date + datetime.timedelta(days=d_idx)
+                # Seasonal curve
+                t_max = 16.0 + (d_idx * 0.3)
+                t_min = 6.0 + (d_idx * 0.2)
+                records.append({"date": str(d_date), "t_max": t_max, "t_min": t_min})
+            series_res = calculate_cumulative_gdd_series(records, base_temp=model_info["base_temp_c"], cap_temp=model_info["cap_temp_c"])
+            df_gdd = pd.DataFrame(series_res["series"])
+            st.line_chart(df_gdd.set_index("date")[["cumulative_gdd", "daily_gdd"]])
+            st.caption(f"30-day cumulative degree-day trajectory (Average: {series_res['average_daily_gdd']} GDD/day).")
+            
         return
 
     # Spray & Dosage Calculator View
@@ -2218,17 +2437,19 @@ def main():
                                 superimposed_img = jet * 0.45 + original_img_arr * 0.55
                                 heatmap_img = np.clip(superimposed_img, 0, 255).astype(np.uint8)
                             
-                            # Compute Spectral & Physical Dimension Metrics
+                            # Compute Spectral, Physical Dimension & GDD Phenology Metrics
                             spectral_res = calculate_canopy_spectral_indices(image)
                             phys_dim = estimate_physical_leaf_dimensions(image)
+                            pheno_res = evaluate_pathogen_phenology(results['predicted_class'], cumulative_gdd=st.session_state.get("farm_cumulative_gdd", 195.0))
 
-                            # Generate Enhanced PDF with CV and Spectral Analysis
+                            # Generate Enhanced PDF with CV, Spectral and Phenology Analysis
                             epi_data = get_disease_epidemiology_profile(results['predicted_class'])
                             pdf_path = generate_pdf_report(
                                 image, heatmap_img, results, info, 
                                 cv_analysis=cv_analysis,
                                 epidemiology_data=epi_data,
-                                spectral_analysis=spectral_res
+                                spectral_analysis=spectral_res,
+                                phenology_data=pheno_res
                             )
                             with open(pdf_path, "rb") as f:
                                 st.download_button(
@@ -2244,10 +2465,11 @@ def main():
                             
                             # Visual Tabs for Inspection
                             st.markdown("#### 🔬 Detailed Visual & Pathological Inspection")
-                            vtab1, vtab2, vtab3, vtab4 = st.tabs([
+                            vtab1, vtab2, vtab3, vtab4, vtab5 = st.tabs([
                                 "🧠 AI Focus (Grad-CAM)",
                                 "🔬 CV Lesion Segmentation",
                                 "🌿 Spectral Chlorophyll & Biometrics",
+                                "🌡️ Pathogen GDD Phenology",
                                 "📊 Probabilities"
                             ])
                             
@@ -2283,6 +2505,20 @@ def main():
                                     st.caption(f"Estimated Dimensions: {phys_dim['leaf_length_cm']} cm length × {phys_dim['leaf_width_cm']} cm width • Aspect Ratio: {phys_dim['aspect_ratio']} • Circularity: {phys_dim['circularity_form_factor']}")
                                 
                             with vtab4:
+                                st.markdown(f"##### 🌡️ Thermal Phenology & Biofix Stage ({pheno_res['model_key']})")
+                                col_ph1, col_ph2 = st.columns([1.2, 1], gap="medium")
+                                with col_ph1:
+                                    st.markdown(f"**Current Life Stage:** <span style='color:{pheno_res['risk_color']}; font-weight:800; font-size:1.15rem;'>{pheno_res['stage']}</span>", unsafe_allow_html=True)
+                                    st.markdown(f"**Inoculum Ripening / Discharge:** `{pheno_res['ascospore_maturation_pct']}`")
+                                    st.markdown(f"**Biofix Event:** `{pheno_res['biofix_event']}` (Base {pheno_res['base_temp_c']}°C)")
+                                    st.markdown(f"**Thermal Accumulation:** `{pheno_res['cumulative_gdd']} GDD`")
+                                    st.markdown(f"**Progress to Next Stage:** `{pheno_res['stage_progress_pct']}%` ({pheno_res['gdd_to_next_stage']} GDD remaining)")
+                                    st.progress(pheno_res["stage_progress_pct"] / 100.0)
+                                with col_ph2:
+                                    st.markdown(f"**Biological Threat:** <span style='background:{pheno_res['risk_color']}22; color:{pheno_res['risk_color']}; padding:4px 10px; border-radius:8px; font-weight:700; border:1px solid {pheno_res['risk_color']}66;'>{pheno_res['risk_level']}</span>", unsafe_allow_html=True)
+                                    st.info(f"**Timed IPM Spray Advisory:**\n{pheno_res['action_advisory']}")
+
+                            with vtab5:
                                 st.markdown("##### 🔬 Top Differential Diagnoses:")
                                 if results.get("top_3"):
                                     for t_rank, t_item in enumerate(results["top_3"], 1):
