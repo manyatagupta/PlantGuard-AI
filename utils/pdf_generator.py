@@ -46,7 +46,7 @@ def create_probability_chart(probabilities, temp_dir):
     plt.close()
     return chart_path
 
-def generate_pdf_report(original_img, heatmap_img, prediction_data, disease_info, cv_analysis=None, epidemiology_data=None, spectral_analysis=None):
+def generate_pdf_report(original_img, heatmap_img, prediction_data, disease_info, cv_analysis=None, epidemiology_data=None, spectral_analysis=None, phenology_data=None):
     """
     Generates an enterprise PDF diagnostic report for a prediction.
     
@@ -58,6 +58,7 @@ def generate_pdf_report(original_img, heatmap_img, prediction_data, disease_info
         cv_analysis: optional dict containing real CV damage metrics and overlay image.
         epidemiology_data: optional dict containing incubation and vector transmission.
         spectral_analysis: optional dict containing GLI/VARI/TGI and SPAD chlorophyll indices.
+        phenology_data: optional dict containing GDD thermal accumulation and stage advisory.
         
     Returns:
         str: Path to the generated PDF file.
@@ -96,6 +97,10 @@ def generate_pdf_report(original_img, heatmap_img, prediction_data, disease_info
         pdf.cell(0, 6, f'Spectral Chlorophyll Proxy: {spectral_analysis.get("spad_chlorophyll_proxy", 0.0)} SPAD ({spectral_analysis.get("chlorophyll_status", "Normal")})', 0, 1)
         pdf.set_text_color(71, 85, 105)
         pdf.cell(0, 6, f'Spectral Indices: GLI {spectral_analysis.get("mean_gli", 0.0):+.3f} | VARI {spectral_analysis.get("mean_vari", 0.0):+.3f} | Active Lamina: {spectral_analysis.get("photosynthetic_efficiency_pct", 100.0)}%', 0, 1)
+        
+    if phenology_data:
+        pdf.set_text_color(109, 40, 217)
+        pdf.cell(0, 6, f'Thermal Phenology: {phenology_data.get("cumulative_gdd", 0.0)} GDD | Stage: {phenology_data.get("stage", "N/A")} ({phenology_data.get("risk_level", "Normal")})', 0, 1)
         
     pdf.set_text_color(0, 0, 0)
     
@@ -216,6 +221,17 @@ def generate_pdf_report(original_img, heatmap_img, prediction_data, disease_info
             quarantine = epidemiology_data.get("quarantine_measures", [])
             if quarantine:
                 add_presc_section("Biosecurity Quarantine & Sanitation Checklist:", quarantine, title_color=(185, 28, 28))
+                
+        if phenology_data:
+            pheno_text = (
+                f"Cumulative Thermal Time: {phenology_data.get('cumulative_gdd', 0.0)} GDD (Base {phenology_data.get('base_temp_c', 0.0)} deg C)\n"
+                f"Biofix Event: {phenology_data.get('biofix_event', 'Bud Break / Transplant')} ({phenology_data.get('biofix_date', 'N/A')})\n"
+                f"Phenological Stage: {phenology_data.get('stage', 'N/A')}\n"
+                f"Inoculum Maturation / Spore Discharge: {phenology_data.get('ascospore_maturation_pct', 'N/A')}\n"
+                f"Biological Threat Level: {phenology_data.get('risk_level', 'N/A')}\n"
+                f"Timed IPM Advisory: {phenology_data.get('action_advisory', 'N/A')}"
+            )
+            add_presc_section("Growing Degree Day (GDD) & Pathogen Phenology:", pheno_text, title_color=(109, 40, 217))
                 
         if spectral_analysis:
             add_presc_section("Foliar Chlorophyll & Vegetative Vigor Diagnostic:", spectral_analysis.get("diagnostic_desc", "Normal photosynthesis."), title_color=(5, 150, 105))
