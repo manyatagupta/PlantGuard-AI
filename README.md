@@ -3,7 +3,7 @@
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue?style=for-the-badge&logo=python)
 ![TensorFlow](https://img.shields.io/badge/TensorFlow-2.x-orange?style=for-the-badge&logo=tensorflow)
 ![Streamlit](https://img.shields.io/badge/Streamlit-1.x-red?style=for-the-badge&logo=streamlit)
-![Tests](https://img.shields.io/badge/Tests-52%20Passed-brightgreen?style=for-the-badge&logo=pytest)
+![Tests](https://img.shields.io/badge/Tests-59%20Passed-brightgreen?style=for-the-badge&logo=pytest)
 ![CI](https://img.shields.io/badge/CI-Automated-success?style=for-the-badge&logo=githubactions)
 ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
@@ -15,6 +15,7 @@ PlantGuard AI is an intelligent, full-stack web application designed to help far
 **⚠️ Disclaimer:** This system is built for educational and assistive purposes and should not replace professional agricultural advice.
 
 ## ✨ Key Features
+- **🌡️ Pathogen Phenology & Growing Degree Day (GDD) Biofix Forecaster**: Physiological thermal time modeling ($\text{GDD} = \max(0, \frac{T_{\max} + T_{\min}}{2} - T_{\text{base}})$) for university-validated epidemiological models (Gadoury & MacHardy Apple Scab ascospore maturation, Penn State FAST Tomato Early Blight 300 P-Day trigger, UC Davis Gubler-Thomas Powdery Mildew, and Whitefly vector generational turnover) with projected calendar milestone crossing dates and timed IPM chemistry advisories.
 - **🌿 Multispectral Foliar Color Decomposition & Chlorophyll Indices**: Computes scientific vegetative indices from RGB foliar imagery including Green Leaf Index ($\text{GLI} = \frac{2G - R - B}{2G + R + B}$), Visible Atmospherically Resistant Index ($\text{VARI}$), Triangular Greenness Index ($\text{TGI}$), and calibrated SPAD Equivalent Proxy (0–80) with false-color Viridis photosynthetic density heatmaps.
 - **📏 Physical Leaf Dimension & Absolute Lesion Surface Area Estimation**: Calibrates optical sensor geometry to estimate real-world leaf surface area ($\text{cm}^2$), absolute necrotic lesion area ($\text{cm}^2$ and $\text{mm}^2$), lamina length/width, aspect ratio, and circularity form factor for precision chemical dosage sizing.
 - **🔬 Crop Pathology Vector, Incubation & Host Susceptibility Engine**: Complete epidemiology database mapping incubation latent periods (days), primary transmission vectors (wind, rain splash, seed-borne, pruning shears), and insect vector carriers (*Bemisia tabaci* whiteflies, *Epitrix* flea beetles, *Tetranychus urticae* spider mites) with biosecurity quarantine containment checklists.
