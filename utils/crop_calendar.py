@@ -177,3 +177,55 @@ def get_crop_calendar(crop_name: str) -> list:
         if k.lower() in crop_name.lower():
             return v
     return PHENOLOGY_CALENDAR.get("Tomato", [])
+
+
+def get_phenology_stage_by_gdd(crop_name: str, cumulative_gdd: float) -> dict:
+    """
+    Correlates cumulative growing degree-days with the active phenological crop growth stage
+    and returns timed cultural and chemical protection protocols.
+    """
+    stages = get_crop_calendar(crop_name)
+    if not stages:
+        return {}
+    
+    # Stage thresholds by crop
+    gdd_thresholds = {
+        "Apple": [(0, 50), (50, 150), (150, 300), (300, 550), (550, 1000), (1000, 9999)],
+        "Tomato": [(0, 100), (100, 250), (250, 450), (450, 750), (750, 9999)],
+        "Potato": [(0, 80), (80, 200), (200, 400), (400, 700), (700, 9999)],
+        "Corn": [(0, 150), (150, 350), (350, 600), (600, 900), (900, 9999)],
+        "Bell Pepper": [(0, 120), (120, 300), (300, 600), (600, 9999)]
+    }
+    
+    matched_crop = "Tomato"
+    for c in gdd_thresholds:
+        if c.lower() in crop_name.lower():
+            matched_crop = c
+            break
+            
+    thresholds = gdd_thresholds[matched_crop]
+    active_idx = 0
+    for idx, (low, high) in enumerate(thresholds):
+        if low <= cumulative_gdd <= high:
+            active_idx = idx
+            break
+    active_idx = min(active_idx, len(stages) - 1)
+    
+    active_stage = stages[active_idx]
+    low_gdd, high_gdd = thresholds[active_idx]
+    
+    return {
+        "crop": matched_crop,
+        "cumulative_gdd": round(cumulative_gdd, 1),
+        "stage_index": active_idx + 1,
+        "total_stages": len(stages),
+        "stage_name": active_stage["stage"],
+        "timing": active_stage["timing"],
+        "threats": active_stage["threats"],
+        "preventive_spray": active_stage["preventive_spray"],
+        "action": active_stage["action"],
+        "gdd_min": low_gdd,
+        "gdd_max": high_gdd,
+        "gdd_to_next_stage": max(0.0, round(high_gdd - cumulative_gdd, 1)) if high_gdd < 9000 else 0.0
+    }
+
