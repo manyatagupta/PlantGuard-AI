@@ -54,6 +54,15 @@ from utils.gdd_phenology import (
     evaluate_pathogen_phenology, estimate_upcoming_milestones,
     get_supported_phenology_models, PATHOGEN_PHENOLOGY_MODELS
 )
+from utils.fungicide_decay import (
+    calculate_foliar_chemical_decay,
+    predict_reapplication_schedule,
+    evaluate_rainfastness,
+    optimize_spray_water_and_adjuvant,
+    get_all_decay_products,
+    get_product_kinetics,
+    FUNGICIDE_KINETICS_DATABASE
+)
 import pydeck as pdk
 import pandas as pd
 import datetime
@@ -339,6 +348,7 @@ def main():
                 "📡 IoT Microclimate & VPD Telemetry",
                 "🌦️ Disease Risk Forecaster", 
                 "🌡️ Pathogen Phenology & Degree-Day Engine",
+                "⏳ Fungicide Residue & Re-Application Forecaster",
                 "⚖️ Spray & Dosage Calculator",
                 "📅 Seasonal Spray Calendar",
                 "📊 Analytics Dashboard", 
@@ -507,6 +517,42 @@ def main():
             st.markdown("<br>", unsafe_allow_html=True)
 
             # Triage Filter Tabs
+            # Secondary Biophysical & Spectral Metric Cards
+            col_spk1, col_spk2, col_spk3, col_spk4 = st.columns(4)
+            with col_spk1:
+                st.markdown(f"""
+                <div class='metric-card'>
+                    <div class='metric-title'>Canopy SPAD Chlorophyll</div>
+                    <div class='metric-value' style='font-size: 2.2rem; color: #10b981;'>{b_res.get('mean_spad_chlorophyll', 0.0)} / 80</div>
+                    <div style='color: #94a3b8; font-size: 0.85rem;'>Mean Nitrogen / Chloroplast Density</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with col_spk2:
+                st.markdown(f"""
+                <div class='metric-card'>
+                    <div class='metric-title'>Green Leaf Index (GLI)</div>
+                    <div class='metric-value' style='font-size: 2.2rem; color: #38bdf8;'>{b_res.get('mean_gli', 0.0):+.3f}</div>
+                    <div style='color: #94a3b8; font-size: 0.85rem;'>Vegetative Fraction ({b_res.get('canopy_photosynthetic_efficiency', 100.0)}% Active)</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with col_spk3:
+                st.markdown(f"""
+                <div class='metric-card'>
+                    <div class='metric-title'>Total Foliar Lamina Area</div>
+                    <div class='metric-value' style='font-size: 2.2rem; color: #a855f7;'>{b_res.get('total_canopy_area_cm2', 0.0):.1f} cm²</div>
+                    <div style='color: #94a3b8; font-size: 0.85rem;'>Aggregate Optical Canopy Surface</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with col_spk4:
+                st.markdown(f"""
+                <div class='metric-card'>
+                    <div class='metric-title'>Total Necrotic Burden</div>
+                    <div class='metric-value' style='font-size: 2.2rem; color: #f43f5e;'>{b_res.get('total_lesion_area_cm2', 0.0):.1f} cm²</div>
+                    <div style='color: #94a3b8; font-size: 0.85rem;'>Absolute Diseased Surface Area</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            st.markdown("<br>", unsafe_allow_html=True)
             st.markdown("#### 🔍 Triage & Foliar Inspection Gallery")
             all_items = b_res.get("items", [])
             crit_items = [it for it in all_items if it.get("triage") == "Critical"]
@@ -1769,6 +1815,197 @@ def main():
             
         return
 
+    # Fungicide Residue Degradation & Re-Application Forecaster View
+    if page == "⏳ Fungicide Residue & Re-Application Forecaster":
+        st.title("⏳ Fungicide Residue Degradation & Re-Application Forecaster")
+        st.markdown("### First-order chemical dissipation kinetics, photothermal breakdown, precipitation wash-off dynamics, and spray water quality optimizer.")
+        st.caption("Models foliar chemical residue decay curves ($C(t) = C_0 \\cdot e^{-kt}$), evaluates rainfastness drying thresholds, and predicts actionable re-spray timing before upcoming infection events.")
+
+        col_fc1, col_fc2 = st.columns([1.6, 2.4], gap="large")
+
+        decay_products = get_all_decay_products()
+
+        with col_fc1:
+            st.markdown("#### 🧪 Chemical Formulation & Application")
+            selected_chem = st.selectbox("🎯 Applied Fungicide / Bio-Pesticide:", decay_products, index=0)
+            k_spec = get_product_kinetics(selected_chem)
+
+            col_sub_d1, col_sub_d2 = st.columns(2)
+            with col_sub_d1:
+                app_date = st.date_input("📅 Date of Application:", datetime.date.today() - datetime.timedelta(days=2))
+            with col_sub_d2:
+                days_elapsed = st.slider("⏱️ Days Elapsed Since Spray:", min_value=0, max_value=14, value=2)
+
+            col_sub_d3, col_sub_d4 = st.columns(2)
+            with col_sub_d3:
+                init_conc = st.slider("🧪 Initial Coverage (%):", 50.0, 100.0, 100.0, 5.0)
+            with col_sub_d4:
+                canopy_growth = st.slider("🌿 Canopy Growth Dilution (%/day):", 0.0, 8.0, 3.0, 0.5)
+
+            st.markdown("#### 🌦️ Microclimate & Rain Simulation")
+            col_wea1, col_wea2 = st.columns(2)
+            with col_wea1:
+                canopy_temp = st.slider("🌡️ Mean Canopy Temp (°C):", 10.0, 38.0, 22.0, 1.0)
+            with col_wea2:
+                uv_idx = st.slider("☀️ Solar UV Index (1-11):", 1.0, 11.0, 6.0, 0.5)
+
+            rain_scenario = st.selectbox(
+                "🌧️ Precipitation Scenario:",
+                ["Dry Canopy (0 mm Rain)", "Single Storm Front", "Custom Daily Rain Profile"]
+            )
+
+            rain_series = [0.0] * 14
+            forecasted_storm_day = None
+            if rain_scenario == "Single Storm Front":
+                col_rn1, col_rn2 = st.columns(2)
+                with col_rn1:
+                    storm_day = st.slider("Storm Arrival Day:", 1, 14, 4)
+                    forecasted_storm_day = storm_day
+                with col_rn2:
+                    storm_mm = st.slider("Rainfall Depth (mm):", 2.0, 50.0, 18.0, 1.0)
+                if storm_day - 1 < len(rain_series):
+                    rain_series[storm_day - 1] = storm_mm
+            elif rain_scenario == "Custom Daily Rain Profile":
+                st.caption("Specify rainfall on days 2, 4, and 7:")
+                rain_series[1] = 4.0
+                rain_series[3] = 15.0
+                rain_series[6] = 22.0
+                st.info("🌧️ Rainfall profile configured: Day 2 (4mm), Day 4 (15mm), Day 7 (22mm).")
+
+        # Run decay simulation and re-application scheduler
+        decay_res = calculate_foliar_chemical_decay(
+            product_name=selected_chem,
+            initial_concentration_pct=init_conc,
+            simulation_days=14,
+            avg_temperature_c=canopy_temp,
+            avg_uv_index=uv_idx,
+            daily_rainfall_mm=rain_series,
+            canopy_growth_rate_pct=canopy_growth,
+            start_date=app_date
+        )
+
+        schedule_res = predict_reapplication_schedule(
+            product_name=selected_chem,
+            application_date=app_date,
+            current_day_offset=days_elapsed,
+            avg_temp_c=canopy_temp,
+            avg_uv=uv_idx,
+            daily_rainfall_mm=rain_series,
+            forecasted_rain_day=forecasted_storm_day
+        )
+
+        with col_fc2:
+            st.markdown("#### 📊 Chemical Dissipation Trajectory & Protection Horizon")
+
+            curr_pct = schedule_res["current_concentration_pct"]
+            days_rem = schedule_res["days_remaining_protection"]
+            respray_date = schedule_res["recommended_respray_date"]
+
+            col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+            with col_m1:
+                st.markdown(f"""
+                <div class='metric-card'>
+                    <div class='metric-title'>Current Active Residue</div>
+                    <div class='metric-value' style='font-size: 2.1rem; color: {schedule_res["status_color"]};'>{curr_pct:.1f}%</div>
+                    <div style='color: #94a3b8; font-size: 0.8rem;'>Day {days_elapsed} since spray</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with col_m2:
+                st.markdown(f"""
+                <div class='metric-card'>
+                    <div class='metric-title'>Effective Half-Life (t½)</div>
+                    <div class='metric-value' style='font-size: 2.1rem; color: #38bdf8;'>{decay_res["effective_half_life_days"]}d</div>
+                    <div style='color: #94a3b8; font-size: 0.8rem;'>Base: {decay_res["base_half_life_days"]}d</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with col_m3:
+                st.markdown(f"""
+                <div class='metric-card'>
+                    <div class='metric-title'>Protection Horizon</div>
+                    <div class='metric-value' style='font-size: 2.1rem; color: #a855f7;'>{days_rem:.1f}d</div>
+                    <div style='color: #94a3b8; font-size: 0.8rem;'>Until < {decay_res["critical_threshold_pct"]}% barrier</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with col_m4:
+                st.markdown(f"""
+                <div class='metric-card'>
+                    <div class='metric-title'>Re-Spray Target Date</div>
+                    <div class='metric-value' style='font-size: 1.5rem; color: #f59e0b; padding-top: 8px;'>{respray_date}</div>
+                    <div style='color: #94a3b8; font-size: 0.8rem;'>Action Threshold</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            st.markdown(f"""
+            <div style='background-color: #1e293b; border-left: 5px solid {schedule_res["status_color"]}; padding: 14px 18px; border-radius: 6px; margin: 16px 0;'>
+                <div style='font-weight: 700; color: {schedule_res["status_color"]}; font-size: 1.05rem;'>{schedule_res["action_headline"]}</div>
+                <div style='color: #cbd5e1; font-size: 0.92rem; margin-top: 4px;'>{schedule_res["action_summary"]}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            if schedule_res.get("weather_alert"):
+                st.warning(f"⚠️ **Precipitation Warning:** {schedule_res['weather_alert']}")
+
+            # Trajectory Chart
+            df_traj = pd.DataFrame(decay_res["trajectory"])
+            st.line_chart(df_traj.set_index("date")[["concentration_pct", "rainfall_mm"]])
+            st.caption("14-day chemical residue trajectory (% active foliar barrier) alongside daily rainfall (mm). Critical action threshold is marked at 20%.")
+
+        st.markdown("---")
+
+        tab_rf, tab_water = st.tabs([
+            "🌧️ Rainfastness Curing & Wash-Off Hazard Auditor",
+            "💧 Spray Tank Water Quality & Alkaline Hydrolysis Optimizer"
+        ])
+
+        with tab_rf:
+            st.markdown("### 🌧️ Rainfastness Drying Window & Wash-Off Vulnerability Auditor")
+            st.caption("Evaluates if fresh chemical deposits have bonded to foliar epicuticular wax before rain events hit.")
+
+            col_rf1, col_rf2 = st.columns([1.5, 2.5], gap="medium")
+            with col_rf1:
+                rf_hours = st.slider("⏱️ Hours Since Application:", 0.0, 12.0, 2.5, 0.5)
+                rf_rain = st.slider("🌧️ Rain Event Expected (mm):", 1.0, 40.0, 15.0, 1.0)
+                rf_audit = evaluate_rainfastness(selected_chem, hours_since_spray=rf_hours, rainfall_intensity_mm=rf_rain)
+
+            with col_rf2:
+                st.markdown(f"#### Curing Status: <span style='color:{rf_audit['badge_color']}; font-weight:800;'>{rf_audit['badge']}</span>", unsafe_allow_html=True)
+                st.markdown(f"**Curing Progress:** `{rf_audit['hours_since_spray']:.1f}h / {rf_audit['required_rainfast_hours']:.1f}h required drying time` ({rf_audit['curing_pct']}%)")
+                st.progress(rf_audit["curing_pct"] / 100.0)
+                st.info(rf_audit["summary"])
+                st.markdown(f"**Projected Foliar Active Loss if Rained Upon:** <span style='color:#ef4444; font-weight:700;'>~{rf_audit['estimated_washoff_loss_pct']}% stripped</span>", unsafe_allow_html=True)
+
+        with tab_water:
+            st.markdown("### 💧 Carrier Water Quality, Alkaline Hydrolysis & Adjuvant Prescription")
+            st.caption("Hard water and high pH cause rapid chemical decomposition inside the spray tank and reduce foliar penetration.")
+
+            col_wq1, col_wq2 = st.columns([1.5, 2.5], gap="medium")
+            with col_wq1:
+                carrier_ph = st.slider("🧪 Measured Spray Water pH:", 5.0, 9.5, 8.0, 0.1)
+                carrier_hard = st.slider("🪨 Total Water Hardness (ppm CaCO3):", 20.0, 500.0, 260.0, 10.0)
+                tank_gals = st.number_input("🚜 Spray Tank Volume (Gallons):", min_value=10.0, max_value=2000.0, value=100.0, step=25.0)
+
+                wq_opt = optimize_spray_water_and_adjuvant(
+                    product_name=selected_chem,
+                    water_ph=carrier_ph,
+                    water_hardness_ppm=carrier_hard,
+                    tank_volume_gallons=tank_gals
+                )
+
+            with col_wq2:
+                st.markdown(f"#### Water Buffer Evaluation: <span style='color:{wq_opt['buffer_color']}; font-weight:800;'>{wq_opt['buffer_badge']}</span>", unsafe_allow_html=True)
+                st.markdown(f"**Optimal Chemistry Range:** `{wq_opt['optimal_ph_range']}` (Target: pH `{wq_opt['target_ph']}`)")
+                
+                if wq_opt.get("hydrolysis_alert"):
+                    st.error(f"⚠️ {wq_opt['hydrolysis_alert']}")
+
+                st.markdown(f"**Buffer Prescription:** {wq_opt['buffer_prescription']}")
+                st.markdown(f"**Hardness Status:** `{wq_opt['hardness_rating']}` — {wq_opt['ams_recommendation']}")
+                
+                st.markdown("##### 🧪 Recommended Tank Adjuvant")
+                st.success(f"**{wq_opt['recommended_adjuvant']}**: {wq_opt['adjuvant_purpose']}")
+
+        return
+
     # Spray & Dosage Calculator View
     if page == "⚖️ Spray & Dosage Calculator":
         st.title("⚖️ Precision Spray & Fertilizer Dosage Calculator")
@@ -2442,6 +2679,11 @@ def main():
                             phys_dim = estimate_physical_leaf_dimensions(image)
                             pheno_res = evaluate_pathogen_phenology(results['predicted_class'], cumulative_gdd=st.session_state.get("farm_cumulative_gdd", 195.0))
 
+                            # Compute Fungicide Decay & Rainfastness Profile
+                            chem_treatments = info.get("chemical_treatment", [])
+                            primary_chem = chem_treatments[0] if (isinstance(chem_treatments, list) and chem_treatments) else "Azoxystrobin 22.9% (Quadris / Heritage)"
+                            decay_profile = calculate_foliar_chemical_decay(primary_chem)
+
                             # Generate Enhanced PDF with CV, Spectral and Phenology Analysis
                             epi_data = get_disease_epidemiology_profile(results['predicted_class'])
                             pdf_path = generate_pdf_report(
@@ -2449,7 +2691,8 @@ def main():
                                 cv_analysis=cv_analysis,
                                 epidemiology_data=epi_data,
                                 spectral_analysis=spectral_res,
-                                phenology_data=pheno_res
+                                phenology_data=pheno_res,
+                                decay_data=decay_profile
                             )
                             with open(pdf_path, "rb") as f:
                                 st.download_button(
@@ -2465,11 +2708,12 @@ def main():
                             
                             # Visual Tabs for Inspection
                             st.markdown("#### 🔬 Detailed Visual & Pathological Inspection")
-                            vtab1, vtab2, vtab3, vtab4, vtab5 = st.tabs([
+                            vtab1, vtab2, vtab3, vtab4, vtab5, vtab6 = st.tabs([
                                 "🧠 AI Focus (Grad-CAM)",
                                 "🔬 CV Lesion Segmentation",
                                 "🌿 Spectral Chlorophyll & Biometrics",
                                 "🌡️ Pathogen GDD Phenology",
+                                "⏳ Chemical Barrier & Rainfastness",
                                 "📊 Probabilities"
                             ])
                             
@@ -2519,6 +2763,21 @@ def main():
                                     st.info(f"**Timed IPM Spray Advisory:**\n{pheno_res['action_advisory']}")
 
                             with vtab5:
+                                st.markdown(f"##### ⏳ Active Chemical Barrier & Rainfastness ({decay_profile['product_name']})")
+                                col_cb1, col_cb2 = st.columns([1.2, 1], gap="medium")
+                                with col_cb1:
+                                    st.markdown(f"**Mode of Action:** `{decay_profile['action_type']}` ({decay_profile['frac_code']})")
+                                    st.markdown(f"**Effective Half-Life (t½):** <span style='color:#38bdf8; font-weight:700;'>{decay_profile['effective_half_life_days']} Days</span> (Base: {decay_profile['base_half_life_days']}d)", unsafe_allow_html=True)
+                                    st.markdown(f"**Rainfast Curing Window:** `{decay_profile['rainfast_hours']} Hours` of rain-free drying")
+                                    st.markdown(f"**Re-Application Horizon:** `~{decay_profile['days_to_threshold']} Days` until < {decay_profile['critical_threshold_pct']}% threshold")
+                                    df_sm = pd.DataFrame(decay_profile["trajectory"])
+                                    st.line_chart(df_sm.set_index("date")[["concentration_pct"]])
+                                with col_cb2:
+                                    k_kin = decay_profile.get("kinetics", {})
+                                    st.info(f"**Tank Water Quality Advisory:**\nOptimal pH range: **{k_kin.get('optimal_spray_ph_min', 5.5)} - {k_kin.get('optimal_spray_ph_max', 6.8)}**.\nAlkaline hydrolysis hazard: **{k_kin.get('alkaline_hydrolysis_hazard', 'LOW')}**.")
+                                    st.success(f"**Recommended Adjuvant:**\n{k_kin.get('recommended_adjuvant', 'Non-Ionic Surfactant')}\n*{k_kin.get('adjuvant_purpose', 'Improves foliar coverage.')}*")
+
+                            with vtab6:
                                 st.markdown("##### 🔬 Top Differential Diagnoses:")
                                 if results.get("top_3"):
                                     for t_rank, t_item in enumerate(results["top_3"], 1):
