@@ -3,7 +3,7 @@
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue?style=for-the-badge&logo=python)
 ![TensorFlow](https://img.shields.io/badge/TensorFlow-2.x-orange?style=for-the-badge&logo=tensorflow)
 ![Streamlit](https://img.shields.io/badge/Streamlit-1.x-red?style=for-the-badge&logo=streamlit)
-![Tests](https://img.shields.io/badge/Tests-59%20Passed-brightgreen?style=for-the-badge&logo=pytest)
+![Tests](https://img.shields.io/badge/Tests-69%20Passed-brightgreen?style=for-the-badge&logo=pytest)
 ![CI](https://img.shields.io/badge/CI-Automated-success?style=for-the-badge&logo=githubactions)
 ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
@@ -15,6 +15,9 @@ PlantGuard AI is an intelligent, full-stack web application designed to help far
 **⚠️ Disclaimer:** This system is built for educational and assistive purposes and should not replace professional agricultural advice.
 
 ## ✨ Key Features
+- **⏳ Fungicide Residue Degradation & Rainfastness Forecaster**: First-order dissipation kinetics ($C(t) = C_0 \cdot e^{-kt}$) across registered agricultural fungicides, Arrhenius $Q_{10}$ thermal degradation, UV photolysis loss, foliar vegetative canopy expansion dilution, and precipitation wash-off dynamics with projected calendar re-application dates and storm front alerts.
+- **💧 Spray Tank Carrier Water Quality & Alkaline Hydrolysis Optimizer**: Evaluates pesticide chemical decomposition risk in alkaline spray water ($pH > 7.0$, e.g. Captan 15-minute hydrolysis half-life at pH 8.0), calculates citric acid acidifier buffer dosages (oz/100 gal and g/100 L) to reach optimal pH 5.5–6.5, assesses total water hardness (ppm $\text{CaCO}_3$) with ammonium sulfate (AMS) conditioning, and recommends high-performance adjuvants (NIS, COC, MSO, Organosilicone).
+- **🔬 Canopy Batch Multispectral & Physical Biometrics Aggregator**: Computes aggregate SPAD chlorophyll proxy, mean Green Leaf Index (GLI), total scanned foliar surface ($\text{cm}^2$), and total necrotic lesion burden ($\text{cm}^2$) across multi-leaf canopy surveys with RFC-4180 CSV export.
 - **🌡️ Pathogen Phenology & Growing Degree Day (GDD) Biofix Forecaster**: Physiological thermal time modeling ($\text{GDD} = \max(0, \frac{T_{\max} + T_{\min}}{2} - T_{\text{base}})$) for university-validated epidemiological models (Gadoury & MacHardy Apple Scab ascospore maturation, Penn State FAST Tomato Early Blight 300 P-Day trigger, UC Davis Gubler-Thomas Powdery Mildew, and Whitefly vector generational turnover) with projected calendar milestone crossing dates and timed IPM chemistry advisories.
 - **🌿 Multispectral Foliar Color Decomposition & Chlorophyll Indices**: Computes scientific vegetative indices from RGB foliar imagery including Green Leaf Index ($\text{GLI} = \frac{2G - R - B}{2G + R + B}$), Visible Atmospherically Resistant Index ($\text{VARI}$), Triangular Greenness Index ($\text{TGI}$), and calibrated SPAD Equivalent Proxy (0–80) with false-color Viridis photosynthetic density heatmaps.
 - **📏 Physical Leaf Dimension & Absolute Lesion Surface Area Estimation**: Calibrates optical sensor geometry to estimate real-world leaf surface area ($\text{cm}^2$), absolute necrotic lesion area ($\text{cm}^2$ and $\text{mm}^2$), lamina length/width, aspect ratio, and circularity form factor for precision chemical dosage sizing.
