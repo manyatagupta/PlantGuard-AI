@@ -10,7 +10,11 @@ import time
 from typing import List, Dict, Any, Tuple
 import numpy as np
 from PIL import Image
-from utils.leaf_cv import analyze_leaf_damage
+from utils.leaf_cv import (
+    analyze_leaf_damage,
+    calculate_canopy_spectral_indices,
+    estimate_physical_leaf_dimensions
+)
 
 
 def process_leaf_batch(
@@ -38,6 +42,11 @@ def process_leaf_batch(
     healthy_count = 0
     high_severity_count = 0
     crop_counts = {}
+    total_spad = 0.0
+    total_gli = 0.0
+    total_leaf_area = 0.0
+    total_lesion_area = 0.0
+    total_photo_eff = 0.0
     
     for idx, file_obj in enumerate(uploaded_files):
         if progress_callback:
@@ -102,6 +111,16 @@ def process_leaf_batch(
             stage_label = cv_metrics.get("stage_label", "Normal")
             severity_color = cv_metrics.get("severity_color", "#10b981")
             overlay_image = cv_metrics.get("overlay_image")
+
+            # Multispectral vegetative indices & physical dimensions
+            spectral_metrics = calculate_canopy_spectral_indices(image)
+            spad_val = float(spectral_metrics.get("spad_chlorophyll_proxy", 35.0))
+            gli_val = float(spectral_metrics.get("mean_gli", 0.0))
+            photo_eff = float(spectral_metrics.get("photosynthetic_efficiency_pct", 100.0))
+
+            physical_dims = estimate_physical_leaf_dimensions(image)
+            leaf_area_cm2 = float(physical_dims.get("leaf_area_cm2", 0.0))
+            lesion_area_cm2 = float(physical_dims.get("lesion_area_cm2", 0.0))
             
             # Triage Severity Assessment
             if is_healthy:
@@ -126,6 +145,11 @@ def process_leaf_batch(
                 
             crop_counts[crop_type] = crop_counts.get(crop_type, 0) + 1
             total_damage += damage_pct
+            total_spad += spad_val
+            total_gli += gli_val
+            total_leaf_area += leaf_area_cm2
+            total_lesion_area += lesion_area_cm2
+            total_photo_eff += photo_eff
             
             results.append({
                 "filename": filename,
@@ -140,8 +164,14 @@ def process_leaf_batch(
                 "stage_label": stage_label,
                 "triage": triage,
                 "triage_color": triage_color,
+                "spad_chlorophyll": spad_val,
+                "mean_gli": gli_val,
+                "leaf_area_cm2": leaf_area_cm2,
+                "lesion_area_cm2": lesion_area_cm2,
+                "photosynthetic_efficiency_pct": photo_eff,
                 "top_3": top_3,
-                "mask_overlay": overlay_image
+                "mask_overlay": overlay_image,
+                "spectral_map": spectral_metrics.get("spectral_map")
             })
             
         except Exception as e:
@@ -162,6 +192,11 @@ def process_leaf_batch(
     valid_count = len([r for r in results if "error" not in r])
     avg_damage = (total_damage / valid_count) if valid_count > 0 else 0.0
     healthy_pct = ((healthy_count / valid_count) * 100) if valid_count > 0 else 0.0
+    avg_spad = round((total_spad / valid_count), 1) if valid_count > 0 else 0.0
+    avg_gli = round((total_gli / valid_count), 3) if valid_count > 0 else 0.0
+    avg_photo_eff = round((total_photo_eff / valid_count), 1) if valid_count > 0 else 0.0
+    total_foliar_cm2 = round(total_leaf_area, 1)
+    total_necrotic_cm2 = round(total_lesion_area, 1)
     
     # Calculate Canopy Health Index (CHI) from 0 to 100
     # Factors: healthy ratio (60%) and low average damage (40%)
@@ -179,22 +214,28 @@ def process_leaf_batch(
         "canopy_health_index": canopy_health_index,
         "high_severity_count": high_severity_count,
         "disease_breakdown": disease_counts,
-        "crop_breakdown": crop_counts
+        "crop_breakdown": crop_counts,
+        "mean_spad_chlorophyll": avg_spad,
+        "mean_gli": avg_gli,
+        "canopy_photosynthetic_efficiency": avg_photo_eff,
+        "total_canopy_area_cm2": total_foliar_cm2,
+        "total_lesion_area_cm2": total_necrotic_cm2
     }
 
 
 def generate_batch_csv_summary(batch_results: Dict[str, Any]) -> str:
     """
-    Generates an RFC-4180 compliant CSV export containing all leaf batch scans.
+    Generates an RFC-4180 compliant CSV export containing all leaf batch scans,
+    including spectral chlorophyll indices and physical surface area measurements.
     """
     output = io.StringIO()
     # UTF-8 BOM
     output.write("\ufeff")
-    output.write("Scan ID,Filename,Crop,Pathology,Status,Confidence %,Damage Area %,Lesion Count,Stage Grade,Triage Level\r\n")
+    output.write("Scan ID,Filename,Crop,Pathology,Status,Confidence %,Damage Area %,Lesion Count,Stage Grade,Triage Level,SPAD Chlorophyll,Leaf Area (cm2),Lesion Area (cm2)\r\n")
     
     for idx, item in enumerate(batch_results.get("items", [])):
         if "error" in item:
-            output.write(f'{idx+1},"{item["filename"]}","N/A","Error: {item["error"]}","Failed",0.0,0.0,0,"Error","Error"\r\n')
+            output.write(f'{idx+1},"{item["filename"]}","N/A","Error: {item["error"]}","Failed",0.0,0.0,0,"Error","Error",0.0,0.0,0.0\r\n')
             continue
             
         status = "Healthy" if item["is_healthy"] else "Infected"
@@ -205,9 +246,12 @@ def generate_batch_csv_summary(batch_results: Dict[str, Any]) -> str:
         lesions = item.get("lesion_count", 0)
         stage = item.get("stage_label", "N/A").replace('"', '""')
         triage = item.get("triage", "Unknown")
+        spad = item.get("spad_chlorophyll", 0.0)
+        leaf_area = item.get("leaf_area_cm2", 0.0)
+        lesion_area = item.get("lesion_area_cm2", 0.0)
         
         output.write(
-            f'{idx+1},"{item["filename"]}","{crop}","{disease}","{status}",{conf_pct:.2f},{damage_pct:.2f},{lesions},"{stage}","{triage}"\r\n'
+            f'{idx+1},"{item["filename"]}","{crop}","{disease}","{status}",{conf_pct:.2f},{damage_pct:.2f},{lesions},"{stage}","{triage}",{spad},{leaf_area},{lesion_area}\r\n'
         )
         
     return output.getvalue()
