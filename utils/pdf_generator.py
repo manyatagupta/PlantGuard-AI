@@ -46,7 +46,7 @@ def create_probability_chart(probabilities, temp_dir):
     plt.close()
     return chart_path
 
-def generate_pdf_report(original_img, heatmap_img, prediction_data, disease_info, cv_analysis=None, epidemiology_data=None, spectral_analysis=None, phenology_data=None):
+def generate_pdf_report(original_img, heatmap_img, prediction_data, disease_info, cv_analysis=None, epidemiology_data=None, spectral_analysis=None, phenology_data=None, decay_data=None):
     """
     Generates an enterprise PDF diagnostic report for a prediction.
     
@@ -59,6 +59,7 @@ def generate_pdf_report(original_img, heatmap_img, prediction_data, disease_info
         epidemiology_data: optional dict containing incubation and vector transmission.
         spectral_analysis: optional dict containing GLI/VARI/TGI and SPAD chlorophyll indices.
         phenology_data: optional dict containing GDD thermal accumulation and stage advisory.
+        decay_data: optional dict containing fungicide residue kinetics and re-spray advisory.
         
     Returns:
         str: Path to the generated PDF file.
@@ -236,6 +237,18 @@ def generate_pdf_report(original_img, heatmap_img, prediction_data, disease_info
         if spectral_analysis:
             add_presc_section("Foliar Chlorophyll & Vegetative Vigor Diagnostic:", spectral_analysis.get("diagnostic_desc", "Normal photosynthesis."), title_color=(5, 150, 105))
             
+        if decay_data:
+            decay_text = (
+                f"Selected Active Treatment: {decay_data.get('product_name', 'N/A')}\n"
+                f"Mode of Action: {decay_data.get('action_type', 'N/A')} ({decay_data.get('frac_code', 'N/A')})\n"
+                f"Foliar Field Half-Life (t1/2): {decay_data.get('effective_half_life_days', decay_data.get('base_half_life_days', 'N/A'))} Days\n"
+                f"Rainfast Curing Period: {decay_data.get('rainfast_hours', 'N/A')} Hours minimum dry time\n"
+                f"Protective Re-Application Horizon: Projected at {decay_data.get('days_to_threshold', '7-10')} Days (Critical Threshold: {decay_data.get('critical_threshold_pct', 20.0)}%)\n"
+                f"Spray Tank Water Quality: Optimal pH {decay_data.get('optimal_ph_range', '5.5 - 6.8')} (Hydrolysis Hazard: {decay_data.get('hydrolysis_hazard', 'LOW')})\n"
+                f"Adjuvant Prescription: {decay_data.get('recommended_adjuvant', 'Non-Ionic Surfactant')} - {decay_data.get('adjuvant_purpose', 'Improves coverage')}"
+            )
+            add_presc_section("Fungicide Residue Degradation & Rainfastness Advisory:", decay_text, title_color=(2, 132, 199))
+
         add_presc_section("Environmental Triggers & Causes:", disease_info.get("causes", "N/A"))
         add_presc_section("Immediate Containment Steps (First-Aid):", disease_info.get("immediate_actions", "N/A"), title_color=(185, 28, 28))
         add_presc_section("Organic & Bio-Control Remedies:", disease_info.get("organic_treatment", "N/A"), title_color=(5, 150, 105))
