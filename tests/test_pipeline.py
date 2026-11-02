@@ -360,6 +360,56 @@ class TestExportUtils(unittest.TestCase):
         self.assertIn("Agronomist John", html)
         self.assertIn("WALES", html)
 
+    def test_generate_pdf_report_with_decay(self):
+        from utils.pdf_generator import generate_pdf_report
+        from PIL import Image
+        import os
+        img = Image.new("RGB", (64, 64), color=(34, 139, 34))
+        pred_data = {
+            "predicted_class": "Tomato___Early_blight",
+            "confidence": 0.95,
+            "is_healthy": False,
+            "all_probabilities": {"Tomato___Early_blight": 0.95, "Tomato___healthy": 0.05}
+        }
+        disease_info = {
+            "title": "Early Blight",
+            "urgency": "High",
+            "description": "Fungal disease",
+            "symptoms": "Concentric rings",
+            "causes": "Warm and wet",
+            "immediate_actions": ["Prune lower leaves"],
+            "organic_treatment": ["Neem Oil"],
+            "chemical_treatment": ["Chlorothalonil"],
+            "preventive_measures": ["Crop rotation"],
+            "nutrition_and_care": "Avoid high nitrogen"
+        }
+        decay_data = {
+            "product_name": "Chlorothalonil 75 WP",
+            "action_type": "Surface Protectant",
+            "frac_code": "Group M05",
+            "effective_half_life_days": 7.5,
+            "rainfast_hours": 2.0,
+            "days_to_threshold": 9.2,
+            "critical_threshold_pct": 20.0,
+            "optimal_ph_range": "5.5 - 6.8",
+            "hydrolysis_hazard": "MODERATE",
+            "recommended_adjuvant": "Spreader-Sticker",
+            "adjuvant_purpose": "Resists rain erosion"
+        }
+        pdf_path = generate_pdf_report(
+            original_img=img,
+            heatmap_img=None,
+            prediction_data=pred_data,
+            disease_info=disease_info,
+            decay_data=decay_data
+        )
+        self.assertTrue(os.path.exists(pdf_path))
+        self.assertGreater(os.path.getsize(pdf_path), 1000)
+        try:
+            os.remove(pdf_path)
+        except OSError:
+            pass
+
 
 class TestSensorTelemetry(unittest.TestCase):
     """Tests for IoT sensor parsing, VPD calculation, and spore hazard modeling."""
@@ -813,6 +863,166 @@ class TestPathogenPhenologyAndThermalGDD(unittest.TestCase):
         self.assertGreater(first_next["days_remaining"], 0)
         self.assertIn("target_gdd", first_next)
         self.assertIn("projected_date", first_next)
+
+
+class TestFungicideKineticsAndWaterQuality(unittest.TestCase):
+    """Tests for fungicide residue first-order dissipation, rainfastness, and spray water conditioning."""
+
+    def test_decay_products_registered(self):
+        from utils.fungicide_decay import get_all_decay_products, get_product_kinetics
+        prods = get_all_decay_products()
+        self.assertGreaterEqual(len(prods), 9)
+        for p in prods:
+            k = get_product_kinetics(p)
+            self.assertIsNotNone(k)
+            self.assertGreater(k["base_half_life_days"], 0.0)
+            self.assertGreater(k["rainfast_hours"], 0.0)
+            self.assertIn("action_type", k)
+            self.assertIn("frac_code", k)
+
+    def test_first_order_residue_decay_basic(self):
+        from utils.fungicide_decay import calculate_foliar_chemical_decay
+        res = calculate_foliar_chemical_decay(
+            product_name="Azoxystrobin 22.9% (Quadris / Heritage)",
+            initial_concentration_pct=100.0,
+            simulation_days=10,
+            avg_temperature_c=20.0,
+            avg_uv_index=5.0,
+            canopy_growth_rate_pct=0.0
+        )
+        self.assertEqual(len(res["trajectory"]), 11)  # Day 0 to 10
+        traj = res["trajectory"]
+        # Day 0 is 100%
+        self.assertEqual(traj[0]["concentration_pct"], 100.0)
+        # Monotonic decrease
+        for i in range(1, len(traj)):
+            self.assertLess(traj[i]["concentration_pct"], traj[i - 1]["concentration_pct"])
+        self.assertAlmostEqual(res["effective_half_life_days"], res["base_half_life_days"], places=1)
+
+    def test_temperature_and_uv_acceleration(self):
+        from utils.fungicide_decay import calculate_foliar_chemical_decay
+        cool_res = calculate_foliar_chemical_decay(
+            product_name="Mancozeb 75 WP (Dithane M-45 Multi-Site)",
+            avg_temperature_c=15.0,
+            avg_uv_index=3.0
+        )
+        hot_res = calculate_foliar_chemical_decay(
+            product_name="Mancozeb 75 WP (Dithane M-45 Multi-Site)",
+            avg_temperature_c=30.0,
+            avg_uv_index=9.0
+        )
+        self.assertLess(hot_res["effective_half_life_days"], cool_res["effective_half_life_days"])
+        self.assertLess(hot_res["trajectory"][-1]["concentration_pct"], cool_res["trajectory"][-1]["concentration_pct"])
+
+    def test_rainfall_washoff_impact(self):
+        from utils.fungicide_decay import calculate_foliar_chemical_decay
+        # Mancozeb (contact protectant, high wash-off coefficient) vs Azoxystrobin (systemic penetrant)
+        rain_event = [0.0, 0.0, 25.0, 0.0, 0.0, 0.0, 0.0]
+        manc_decay = calculate_foliar_chemical_decay(
+            product_name="Mancozeb 75 WP (Dithane M-45 Multi-Site)",
+            daily_rainfall_mm=rain_event,
+            simulation_days=6
+        )
+        azoxy_decay = calculate_foliar_chemical_decay(
+            product_name="Azoxystrobin 22.9% (Quadris / Heritage)",
+            daily_rainfall_mm=rain_event,
+            simulation_days=6
+        )
+        # Mancozeb washoff loss on day 3 should be greater than Azoxystrobin
+        manc_wash = manc_decay["trajectory"][3]["washoff_loss_pct"]
+        azoxy_wash = azoxy_decay["trajectory"][3]["washoff_loss_pct"]
+        self.assertGreater(manc_wash, azoxy_wash)
+
+    def test_canopy_vegetative_growth_dilution(self):
+        from utils.fungicide_decay import calculate_foliar_chemical_decay
+        static_canopy = calculate_foliar_chemical_decay(
+            product_name="Chlorothalonil 75 WP (Daconil Broad-Spectrum)",
+            canopy_growth_rate_pct=0.0,
+            simulation_days=7
+        )
+        growing_canopy = calculate_foliar_chemical_decay(
+            product_name="Chlorothalonil 75 WP (Daconil Broad-Spectrum)",
+            canopy_growth_rate_pct=5.0,
+            simulation_days=7
+        )
+        self.assertLess(growing_canopy["trajectory"][-1]["concentration_pct"], static_canopy["trajectory"][-1]["concentration_pct"])
+
+    def test_reapplication_prediction_schedule(self):
+        from utils.fungicide_decay import predict_reapplication_schedule
+        import datetime
+        app_d = datetime.date(2026, 6, 1)
+        sched = predict_reapplication_schedule(
+            product_name="Chlorothalonil 75 WP (Daconil Broad-Spectrum)",
+            application_date=app_d,
+            current_day_offset=2,
+            forecasted_rain_day=4
+        )
+        self.assertIn("recommended_respray_date", sched)
+        self.assertGreater(sched["days_remaining_protection"], 0.0)
+        self.assertIn(sched["urgency_level"], ["ROUTINE", "ADVANCED_BEFORE_RAIN", "RESPRAY_WINDOW_ACTIVE"])
+
+    def test_rainfastness_curing_states(self):
+        from utils.fungicide_decay import evaluate_rainfastness
+        # Azoxystrobin requires 2.0h
+        cured = evaluate_rainfastness("Azoxystrobin 22.9% (Quadris / Heritage)", hours_since_spray=3.0)
+        self.assertEqual(cured["state"], "SECURE_RAINFAST")
+        self.assertEqual(cured["curing_pct"], 100.0)
+
+        partial = evaluate_rainfastness("Azoxystrobin 22.9% (Quadris / Heritage)", hours_since_spray=1.2)
+        self.assertEqual(partial["state"], "PARTIAL_CURE")
+
+        uncured = evaluate_rainfastness("Azoxystrobin 22.9% (Quadris / Heritage)", hours_since_spray=0.4)
+        self.assertEqual(uncured["state"], "UNCURED_VULNERABLE")
+        self.assertGreater(uncured["estimated_washoff_loss_pct"], 50.0)
+
+    def test_spray_water_alkaline_hydrolysis_and_acidifier(self):
+        from utils.fungicide_decay import optimize_spray_water_and_adjuvant
+        # Captan at alkaline pH 8.2 has extreme hazard
+        captan_opt = optimize_spray_water_and_adjuvant(
+            product_name="Captan 50 WP",
+            water_ph=8.2,
+            water_hardness_ppm=280.0,
+            tank_volume_gallons=100.0
+        )
+        self.assertEqual(captan_opt["hydrolysis_hazard"], "EXTREME")
+        self.assertIn("ALKALINE HYDROLYSIS DANGER", captan_opt["hydrolysis_alert"])
+        self.assertEqual(captan_opt["buffer_status"], "ACIDIFIER_REQUIRED")
+        self.assertGreater(captan_opt["citric_acid_oz_total"], 0.0)
+        self.assertIn("Ammonium Sulfate", captan_opt["ams_recommendation"])
+
+        # Optimal neutral water
+        opt_water = optimize_spray_water_and_adjuvant(
+            product_name="Chlorothalonil 75 WP (Daconil Broad-Spectrum)",
+            water_ph=6.2,
+            water_hardness_ppm=80.0
+        )
+        self.assertEqual(opt_water["buffer_status"], "OPTIMAL_PH")
+        self.assertEqual(opt_water["citric_acid_oz_total"], 0.0)
+
+
+class TestBatchScannerMultispectralAndPhysicalAggregation(unittest.TestCase):
+    """Tests for batch scanner spectral and physical metric aggregation."""
+
+    def test_batch_scanner_spectral_and_physical_metrics(self):
+        from utils.batch_scanner import process_leaf_batch, generate_batch_csv_summary
+        from PIL import Image
+
+        img1 = Image.new("RGB", (100, 100), color=(34, 139, 34))
+        img2 = Image.new("RGB", (100, 100), color=(139, 69, 19))
+
+        batch_res = process_leaf_batch([img1, img2])
+        self.assertIn("mean_spad_chlorophyll", batch_res)
+        self.assertIn("mean_gli", batch_res)
+        self.assertIn("total_canopy_area_cm2", batch_res)
+        self.assertIn("total_lesion_area_cm2", batch_res)
+        self.assertIn("canopy_photosynthetic_efficiency", batch_res)
+        self.assertGreaterEqual(batch_res["mean_spad_chlorophyll"], 0.0)
+
+        # Verify CSV summary includes new biometric headers
+        csv_out = generate_batch_csv_summary(batch_res)
+        self.assertIn("SPAD Chlorophyll", csv_out)
+        self.assertIn("Leaf Area (cm2)", csv_out)
+        self.assertIn("Lesion Area (cm2)", csv_out)
 
 
 if __name__ == "__main__":
