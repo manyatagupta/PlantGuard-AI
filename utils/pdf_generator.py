@@ -46,7 +46,7 @@ def create_probability_chart(probabilities, temp_dir):
     plt.close()
     return chart_path
 
-def generate_pdf_report(original_img, heatmap_img, prediction_data, disease_info, cv_analysis=None, epidemiology_data=None, spectral_analysis=None, phenology_data=None, decay_data=None):
+def generate_pdf_report(original_img, heatmap_img, prediction_data, disease_info, cv_analysis=None, epidemiology_data=None, spectral_analysis=None, phenology_data=None, decay_data=None, spatial_data=None):
     """
     Generates an enterprise PDF diagnostic report for a prediction.
     
@@ -60,6 +60,7 @@ def generate_pdf_report(original_img, heatmap_img, prediction_data, disease_info
         spectral_analysis: optional dict containing GLI/VARI/TGI and SPAD chlorophyll indices.
         phenology_data: optional dict containing GDD thermal accumulation and stage advisory.
         decay_data: optional dict containing fungicide residue kinetics and re-spray advisory.
+        spatial_data: optional dict containing VRA spatial mapping and chemical savings metrics.
         
     Returns:
         str: Path to the generated PDF file.
@@ -248,6 +249,17 @@ def generate_pdf_report(original_img, heatmap_img, prediction_data, disease_info
                 f"Adjuvant Prescription: {decay_data.get('recommended_adjuvant', 'Non-Ionic Surfactant')} - {decay_data.get('adjuvant_purpose', 'Improves coverage')}"
             )
             add_presc_section("Fungicide Residue Degradation & Rainfastness Advisory:", decay_text, title_color=(2, 132, 199))
+
+        if spatial_data:
+            econ = spatial_data.get("economics", {})
+            spatial_text = (
+                f"Target Farm Lot / Block: {spatial_data.get('farm_block_name', 'Farm Lot')} ({spatial_data.get('total_area_acres', 'N/A')} Acres)\n"
+                f"GPS Coordinates: Lat {spatial_data.get('center_latitude', 'N/A')}, Lon {spatial_data.get('center_longitude', 'N/A')}\n"
+                f"Variable-Rate Strategy: Zone 1 Curative (100%), Zone 2 Protective (50%), Zone 3 Refuge (0%)\n"
+                f"Precision Chemical Savings: {econ.get('chemical_reduction_pct', 0.0)}% reduction ({econ.get('liters_saved', 0.0)} Liters avoided)\n"
+                f"Economic Savings: ${econ.get('dollars_saved', 0.0):.2f} total (${econ.get('savings_per_acre', 0.0):.2f}/acre)"
+            )
+            add_presc_section("Precision Variable-Rate (VRA) Spatial Lot Prescription:", spatial_text, title_color=(16, 185, 129))
 
         add_presc_section("Environmental Triggers & Causes:", disease_info.get("causes", "N/A"))
         add_presc_section("Immediate Containment Steps (First-Aid):", disease_info.get("immediate_actions", "N/A"), title_color=(185, 28, 28))
