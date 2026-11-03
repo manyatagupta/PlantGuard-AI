@@ -1025,6 +1025,148 @@ class TestBatchScannerMultispectralAndPhysicalAggregation(unittest.TestCase):
         self.assertIn("Lesion Area (cm2)", csv_out)
 
 
+class TestSpatialMappingAndVariableRatePrescription(unittest.TestCase):
+    """Tests for spatial disease IDW interpolation, VRA zone classification, and GIS exports."""
+
+    def test_demo_farm_blocks_exist(self):
+        from utils.spatial_mapping import DEMO_FARM_BLOCKS
+        self.assertGreaterEqual(len(DEMO_FARM_BLOCKS), 3)
+        for name, blk in DEMO_FARM_BLOCKS.items():
+            self.assertIn("crop", blk)
+            self.assertIn("center_lat", blk)
+            self.assertIn("center_lon", blk)
+            self.assertIn("scout_points", blk)
+            self.assertGreater(len(blk["scout_points"]), 0)
+
+    def test_meters_to_lat_lon_offsets(self):
+        from utils.spatial_mapping import meters_to_lat_lon_offsets
+        dlat_zero, dlon_zero = meters_to_lat_lon_offsets(0.0, 0.0, 38.5)
+        self.assertEqual(dlat_zero, 0.0)
+        self.assertEqual(dlon_zero, 0.0)
+
+        dlat_pos, dlon_pos = meters_to_lat_lon_offsets(100.0, 100.0, 38.5)
+        self.assertGreater(dlat_pos, 0.0)
+        self.assertGreater(dlon_pos, 0.0)
+
+    def test_idw_interpolation_accuracy(self):
+        from utils.spatial_mapping import interpolate_idw
+        pts = [
+            {"offset_x": 0.0, "offset_y": 0.0, "damage_pct": 50.0},
+            {"offset_x": 100.0, "offset_y": 100.0, "damage_pct": 10.0}
+        ]
+        # At exact position of pt 0
+        val_0 = interpolate_idw(0.0, 0.0, pts)
+        self.assertEqual(val_0, 50.0)
+
+        # Midpoint
+        val_mid = interpolate_idw(50.0, 50.0, pts)
+        self.assertAlmostEqual(val_mid, 30.0, delta=1.0)
+
+    def test_prescription_grid_generation(self):
+        from utils.spatial_mapping import generate_field_prescription_grid
+        presc = generate_field_prescription_grid("North Valley Vineyard (Block 7)", grid_resolution_meters=30.0)
+        self.assertIn("grid_cells", presc)
+        self.assertIn("economics", presc)
+        self.assertIn("zone_distribution", presc)
+        self.assertIn("field_boundary", presc)
+        self.assertGreater(len(presc["grid_cells"]), 0)
+
+        # Verify cell schema
+        cell0 = presc["grid_cells"][0]
+        self.assertIn("center_lat", cell0)
+        self.assertIn("center_lon", cell0)
+        self.assertIn("damage_pct", cell0)
+        self.assertIn("zone_name", cell0)
+        self.assertIn("rate_multiplier", cell0)
+        self.assertIn("rate_l_ha", cell0)
+        self.assertIn("polygon_coords", cell0)
+        self.assertEqual(len(cell0["polygon_coords"]), 5)
+
+    def test_chemical_savings_calculation(self):
+        from utils.spatial_mapping import generate_field_prescription_grid
+        presc = generate_field_prescription_grid("Crestview Tomato Basin (Plot 4-East)", grid_resolution_meters=25.0)
+        econ = presc["economics"]
+        self.assertLess(econ["vra_precision_liters"], econ["uniform_broadcast_liters"])
+        self.assertGreater(econ["liters_saved"], 0.0)
+        self.assertGreater(econ["chemical_reduction_pct"], 15.0)
+        self.assertGreater(econ["dollars_saved"], 0.0)
+        self.assertGreater(econ["savings_per_acre"], 0.0)
+
+    def test_geojson_export_rfc7946(self):
+        from utils.spatial_mapping import generate_field_prescription_grid, export_field_prescription_geojson
+        import json
+        presc = generate_field_prescription_grid("West Ridge Apple Orchard (Quadrant B)")
+        geojson_str = export_field_prescription_geojson(presc)
+        doc = json.loads(geojson_str)
+        self.assertEqual(doc["type"], "FeatureCollection")
+        self.assertGreater(len(doc["features"]), 5)
+        # Check boundary feature
+        boundary = doc["features"][0]
+        self.assertEqual(boundary["geometry"]["type"], "Polygon")
+        self.assertEqual(boundary["properties"]["feature_type"], "Field_Boundary")
+
+    def test_kml_export_format(self):
+        from utils.spatial_mapping import generate_field_prescription_grid, export_field_prescription_kml
+        presc = generate_field_prescription_grid("North Valley Vineyard (Block 7)")
+        kml_str = export_field_prescription_kml(presc)
+        self.assertTrue(kml_str.startswith('<?xml version="1.0" encoding="UTF-8"?>'))
+        self.assertIn("<kml", kml_str)
+        self.assertIn("<Polygon>", kml_str)
+        self.assertIn("<LinearRing>", kml_str)
+        self.assertIn("<Placemark>", kml_str)
+        self.assertIn("polyRed", kml_str)
+
+    def test_rate_controller_csv(self):
+        from utils.spatial_mapping import generate_field_prescription_grid, export_rate_controller_csv
+        presc = generate_field_prescription_grid("Crestview Tomato Basin (Plot 4-East)")
+        csv_str = export_rate_controller_csv(presc)
+        self.assertTrue(csv_str.startswith("\ufeff"))
+        self.assertIn("Grid_ID,Row,Col,Latitude,Longitude", csv_str)
+        self.assertIn("CELL-00-00", csv_str)
+        lines = [line for line in csv_str.strip().split("\r\n") if line]
+        self.assertEqual(len(lines), 1 + len(presc["grid_cells"]))
+
+    def test_pdf_report_with_spatial_data(self):
+        from utils.pdf_generator import generate_pdf_report
+        from utils.spatial_mapping import generate_field_prescription_grid
+        from PIL import Image
+        import os
+
+        img = Image.new("RGB", (64, 64), color=(34, 139, 34))
+        pred_data = {
+            "predicted_class": "Grape___Black_rot",
+            "confidence": 0.94,
+            "is_healthy": False,
+            "all_probabilities": {"Grape___Black_rot": 0.94, "Grape___healthy": 0.06}
+        }
+        disease_info = {
+            "title": "Black Rot",
+            "urgency": "High",
+            "description": "Fungal rot",
+            "symptoms": "Black shriveled fruit mummies",
+            "causes": "Warm and wet",
+            "immediate_actions": ["Strip mummies"],
+            "organic_treatment": ["Copper"],
+            "chemical_treatment": ["Myclobutanil"],
+            "preventive_measures": ["Canopy airflow"],
+            "nutrition_and_care": "Balanced compost"
+        }
+        presc = generate_field_prescription_grid("North Valley Vineyard (Block 7)")
+        pdf_path = generate_pdf_report(
+            original_img=img,
+            heatmap_img=None,
+            prediction_data=pred_data,
+            disease_info=disease_info,
+            spatial_data=presc
+        )
+        self.assertTrue(os.path.exists(pdf_path))
+        self.assertGreater(os.path.getsize(pdf_path), 1000)
+        try:
+            os.remove(pdf_path)
+        except OSError:
+            pass
+
+
 if __name__ == "__main__":
     unittest.main()
 
