@@ -63,6 +63,13 @@ from utils.fungicide_decay import (
     get_product_kinetics,
     FUNGICIDE_KINETICS_DATABASE
 )
+from utils.spatial_mapping import (
+    generate_field_prescription_grid,
+    export_field_prescription_geojson,
+    export_field_prescription_kml,
+    export_rate_controller_csv,
+    DEMO_FARM_BLOCKS
+)
 import pydeck as pdk
 import pandas as pd
 import datetime
@@ -350,6 +357,7 @@ def main():
                 "🌡️ Pathogen Phenology & Degree-Day Engine",
                 "⏳ Fungicide Residue & Re-Application Forecaster",
                 "⚖️ Spray & Dosage Calculator",
+                "🗺️ Precision Field GIS & Variable-Rate Spray Grid",
                 "📅 Seasonal Spray Calendar",
                 "📊 Analytics Dashboard", 
                 "📖 Care & Treatment Handbook", 
@@ -998,6 +1006,201 @@ def main():
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
+        return
+
+    # Precision Field GIS & Variable-Rate Spray Grid View
+    if page == "🗺️ Precision Field GIS & Variable-Rate Spray Grid":
+        st.title("🗺️ Precision Spatial GIS & Variable-Rate Spraying Grid")
+        st.markdown("### Inverse Distance Weighting (IDW) disease interpolation, VRA zone classification, and machine-ready prescription exports.")
+        st.caption("Transforms point-scouted leaf pathology records into field-wide Variable-Rate Application (VRA) zones, distinguishing between curative hotspots (100% rate), protective perimeter buffers (50% rate), and clean refuges (0% skip spray) to minimize agrochemical runoff.")
+
+        col_gctl1, col_gctl2 = st.columns([1.6, 2.4], gap="large")
+
+        demo_names = list(DEMO_FARM_BLOCKS.keys())
+
+        with col_gctl1:
+            st.markdown("#### 🌾 Farm Block & Scouting Configuration")
+            selected_block = st.selectbox("🎯 Target Farm Block / Orchard:", demo_names, index=0)
+            block_meta = DEMO_FARM_BLOCKS[selected_block]
+
+            st.caption(f"**Crop:** {block_meta['crop']} • **Threat:** {block_meta['primary_threat']} • **Area:** {block_meta['area_acres']} Acres ({block_meta['width_meters']}m × {block_meta['length_meters']}m)")
+
+            col_th1, col_th2 = st.columns(2)
+            with col_th1:
+                curative_th = st.slider("🔴 Curative Hotspot Threshold (%):", 12.0, 35.0, 20.0, 1.0)
+            with col_th2:
+                protective_th = st.slider("🟡 Protective Buffer Threshold (%):", 4.0, 15.0, 8.0, 1.0)
+
+            col_cf1, col_cf2 = st.columns(2)
+            with col_cf1:
+                grid_res = st.selectbox("📏 Grid Cell Size:", [15.0, 20.0, 25.0, 30.0], index=1)
+            with col_cf2:
+                chem_cost = st.number_input("💰 Chemical Cost ($/L):", min_value=5.0, max_value=200.0, value=34.0, step=2.0)
+
+            st.markdown("##### 📍 Field Inspection Sampling Points")
+            pts_df = pd.DataFrame(block_meta["scout_points"])[["id", "disease", "damage_pct", "severity_grade"]]
+            st.dataframe(pts_df.rename(columns={"id": "Marker", "disease": "Diagnosis", "damage_pct": "Foliar Damage %", "severity_grade": "Grade"}), use_container_width=True, height=160)
+
+        # Generate spatial VRA prescription
+        presc = generate_field_prescription_grid(
+            farm_block_name=selected_block,
+            grid_resolution_meters=grid_res,
+            curative_threshold_pct=curative_th,
+            protective_threshold_pct=protective_th,
+            chemical_cost_per_liter=chem_cost
+        )
+
+        econ = presc["economics"]
+
+        with col_gctl2:
+            st.markdown("#### 💰 Precision Variable-Rate Economics & Chemical Savings")
+
+            col_em1, col_em2, col_em3, col_em4 = st.columns(4)
+            with col_em1:
+                st.markdown(f"""
+                <div class='metric-card'>
+                    <div class='metric-title'>Chemical Reduction</div>
+                    <div class='metric-value' style='font-size: 2.1rem; color: #10b981;'>{econ['chemical_reduction_pct']}%</div>
+                    <div style='color: #94a3b8; font-size: 0.8rem;'>Active Ingredient Avoided</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with col_em2:
+                st.markdown(f"""
+                <div class='metric-card'>
+                    <div class='metric-title'>Volume Saved</div>
+                    <div class='metric-value' style='font-size: 2.1rem; color: #38bdf8;'>{econ['liters_saved']} L</div>
+                    <div style='color: #94a3b8; font-size: 0.8rem;'>vs {econ['uniform_broadcast_liters']} L Blanket Spray</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with col_em3:
+                st.markdown(f"""
+                <div class='metric-card'>
+                    <div class='metric-title'>Total Cost Saved</div>
+                    <div class='metric-value' style='font-size: 2.1rem; color: #a855f7;'>${econ['dollars_saved']:.2f}</div>
+                    <div style='color: #94a3b8; font-size: 0.8rem;'>Per Single Application</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with col_em4:
+                st.markdown(f"""
+                <div class='metric-card'>
+                    <div class='metric-title'>Savings / Acre</div>
+                    <div class='metric-value' style='font-size: 2.1rem; color: #f59e0b;'>${econ['savings_per_acre']:.2f}</div>
+                    <div style='color: #94a3b8; font-size: 0.8rem;'>Across {presc['total_area_acres']} Acres</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            st.markdown(f"""
+            <div style='background-color: #1e293b; border-left: 5px solid #10b981; padding: 12px 16px; border-radius: 6px; margin: 14px 0;'>
+                <div style='font-weight: 700; color: #34d399; font-size: 1.0rem;'>🌱 Eco-Toxicity & Runoff Stewardship Alert</div>
+                <div style='color: #cbd5e1; font-size: 0.88rem; margin-top: 3px;'>
+                    By switching from uniform broadcast to precision VRA zoning, you preserve <strong>{presc['zone_distribution'].get('Zone 3 (No-Spray 0%)', 0)} refuge micro-cells (0% rate)</strong>, preventing chemical leaching into riparian waterways.
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # PyDeck Spatial Map
+            view_state = pdk.ViewState(
+                latitude=presc["center_latitude"],
+                longitude=presc["center_longitude"],
+                zoom=16,
+                pitch=35
+            )
+
+            # Prepare Polygon Layer for Cells
+            poly_data = []
+            for cell in presc["grid_cells"]:
+                fill_rgb = [239, 68, 68, 150] if cell["rate_multiplier"] >= 1.0 else ([245, 158, 11, 150] if cell["rate_multiplier"] > 0.0 else [16, 185, 129, 140])
+                poly_data.append({
+                    "polygon": cell["polygon_coords"],
+                    "fill_color": fill_rgb,
+                    "zone_name": cell["zone_name"],
+                    "rate_l_ha": cell["rate_l_ha"],
+                    "damage_pct": cell["damage_pct"],
+                    "action_text": cell["action_text"]
+                })
+
+            polygon_layer = pdk.Layer(
+                "PolygonLayer",
+                data=poly_data,
+                get_polygon="polygon",
+                get_fill_color="fill_color",
+                get_line_color=[255, 255, 255, 60],
+                line_width_min_pixels=1,
+                pickable=True,
+                auto_highlight=True
+            )
+
+            # Scatterplot for scout points
+            scout_layer = pdk.Layer(
+                "ScatterplotLayer",
+                data=presc["scout_points"],
+                get_position="[longitude, latitude]",
+                get_radius=6,
+                radius_min_pixels=6,
+                radius_max_pixels=14,
+                get_fill_color=[255, 255, 255, 220],
+                get_line_color=[15, 23, 42, 255],
+                line_width_min_pixels=2,
+                pickable=True
+            )
+
+            deck_map = pdk.Deck(
+                layers=[polygon_layer, scout_layer],
+                initial_view_state=view_state,
+                tooltip={
+                    "html": "<b>{zone_name}</b><br/>Damage: {damage_pct}%<br/>Target Rate: {rate_l_ha} L/ha<br/>Advisory: {action_text}",
+                    "style": {"backgroundColor": "#0f172a", "color": "#f8fafc", "fontSize": "12px"}
+                },
+                map_style="dark"
+            )
+            st.pydeck_chart(deck_map)
+
+        st.markdown("---")
+
+        col_dtab, col_dexp = st.columns([1.5, 1.5], gap="medium")
+        with col_dtab:
+            st.markdown("#### 📋 Variable-Rate Prescription Zone Breakdown")
+            z_rows = []
+            for z_name, count in presc["zone_distribution"].items():
+                pct = round((count / presc["total_cells"]) * 100.0, 1)
+                rate_str = "100% Rate" if "Zone 1" in z_name else ("50% Rate" if "Zone 2" in z_name else "0% Skip Spray")
+                z_rows.append({"Prescription Zone": z_name, "Grid Micro-Cells": count, "Land Area %": f"{pct}%", "Target Rate": rate_str})
+            st.dataframe(pd.DataFrame(z_rows), use_container_width=True)
+
+        with col_dexp:
+            st.markdown("#### 📥 Precision Export Telemetry (Machine & Drone Ready)")
+            st.caption("Export geo-referenced shape coordinates and application rate tables for precision tractor rate controllers and UAV sprayers.")
+
+            geojson_str = export_field_prescription_geojson(presc)
+            kml_str = export_field_prescription_kml(presc)
+            csv_str = export_rate_controller_csv(presc)
+
+            col_btn1, col_btn2, col_btn3 = st.columns(3)
+            with col_btn1:
+                st.download_button(
+                    label="🌐 GeoJSON (RFC-7946)",
+                    data=geojson_str,
+                    file_name=f"{selected_block.replace(' ', '_')}_prescription.geojson",
+                    mime="application/geo+json",
+                    use_container_width=True
+                )
+            with col_btn2:
+                st.download_button(
+                    label="🗺️ Google Earth (KML)",
+                    data=kml_str,
+                    file_name=f"{selected_block.replace(' ', '_')}_prescription.kml",
+                    mime="application/vnd.google-earth.kml+xml",
+                    use_container_width=True
+                )
+            with col_btn3:
+                st.download_button(
+                    label="📊 Rate Controller CSV",
+                    data=csv_str,
+                    file_name=f"{selected_block.replace(' ', '_')}_rate_matrix.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+
         return
 
     # Seasonal Spray Calendar View
@@ -2686,13 +2889,16 @@ def main():
 
                             # Generate Enhanced PDF with CV, Spectral and Phenology Analysis
                             epi_data = get_disease_epidemiology_profile(results['predicted_class'])
+                            # Spatial VRA prescription context
+                            spatial_summary = generate_field_prescription_grid(farm_block_name="North Valley Vineyard (Block 7)")
                             pdf_path = generate_pdf_report(
                                 image, heatmap_img, results, info, 
                                 cv_analysis=cv_analysis,
                                 epidemiology_data=epi_data,
                                 spectral_analysis=spectral_res,
                                 phenology_data=pheno_res,
-                                decay_data=decay_profile
+                                decay_data=decay_profile,
+                                spatial_data=spatial_summary
                             )
                             with open(pdf_path, "rb") as f:
                                 st.download_button(
