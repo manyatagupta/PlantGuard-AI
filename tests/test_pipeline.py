@@ -1166,6 +1166,36 @@ class TestSpatialMappingAndVariableRatePrescription(unittest.TestCase):
         except OSError:
             pass
 
+    def test_calculate_field_bounding_box(self):
+        from utils.spatial_mapping import calculate_field_bounding_box
+        poly = [
+            [-121.748, 38.541],
+            [-121.742, 38.541],
+            [-121.742, 38.545],
+            [-121.748, 38.545],
+            [-121.748, 38.541]
+        ]
+        bbox = calculate_field_bounding_box(poly)
+        self.assertEqual(bbox["min_lat"], 38.541)
+        self.assertEqual(bbox["max_lat"], 38.545)
+        self.assertEqual(bbox["min_lon"], -121.748)
+        self.assertEqual(bbox["max_lon"], -121.742)
+        self.assertGreater(bbox["delta_lat"], 0.0)
+        self.assertGreater(bbox["delta_lon"], 0.0)
+
+    def test_calculate_polygon_acreage(self):
+        from utils.spatial_mapping import calculate_polygon_acreage
+        poly = [
+            [-121.748, 38.541],
+            [-121.742, 38.541],
+            [-121.742, 38.545],
+            [-121.748, 38.545],
+            [-121.748, 38.541]
+        ]
+        acres = calculate_polygon_acreage(poly)
+        self.assertGreater(acres, 10.0)
+        self.assertLess(acres, 100.0)
+
 
 if __name__ == "__main__":
     unittest.main()

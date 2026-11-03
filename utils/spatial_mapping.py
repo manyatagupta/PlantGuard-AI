@@ -477,3 +477,53 @@ def export_rate_controller_csv(field_prescription: Dict[str, Any]) -> str:
         )
 
     return output.getvalue()
+
+
+def calculate_field_bounding_box(polygon_coords: List[List[float]]) -> Dict[str, float]:
+    """
+    Computes geographic WGS84 bounding box (min/max latitude and longitude)
+    for a field boundary or prescription polygon.
+    """
+    if not polygon_coords:
+        return {"min_lat": 0.0, "max_lat": 0.0, "min_lon": 0.0, "max_lon": 0.0, "delta_lat": 0.0, "delta_lon": 0.0}
+
+    lons = [pt[0] for pt in polygon_coords]
+    lats = [pt[1] for pt in polygon_coords]
+
+    return {
+        "min_lat": round(min(lats), 6),
+        "max_lat": round(max(lats), 6),
+        "min_lon": round(min(lons), 6),
+        "max_lon": round(max(lons), 6),
+        "delta_lat": round(max(lats) - min(lats), 6),
+        "delta_lon": round(max(lons) - min(lons), 6)
+    }
+
+
+def calculate_polygon_acreage(polygon_coords: List[List[float]]) -> float:
+    """
+    Estimates land surface acreage of a closed WGS84 polygon using the spherical shoelace formula.
+    """
+    if len(polygon_coords) < 3:
+        return 0.0
+
+    radius = 6378137.0
+    area = 0.0
+
+    coords = polygon_coords[:-1] if polygon_coords[0] == polygon_coords[-1] else polygon_coords
+    n = len(coords)
+
+    if n < 3:
+        return 0.0
+
+    for i in range(n):
+        p1 = coords[i]
+        p2 = coords[(i + 1) % n]
+        lon1, lat1 = math.radians(p1[0]), math.radians(p1[1])
+        lon2, lat2 = math.radians(p2[0]), math.radians(p2[1])
+        area += (lon2 - lon1) * (2.0 + math.sin(lat1) + math.sin(lat2))
+
+    area = abs(area * radius * radius / 2.0)
+    return round(area * 0.000247105, 2)
+
+
