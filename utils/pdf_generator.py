@@ -46,7 +46,7 @@ def create_probability_chart(probabilities, temp_dir):
     plt.close()
     return chart_path
 
-def generate_pdf_report(original_img, heatmap_img, prediction_data, disease_info, cv_analysis=None, epidemiology_data=None, spectral_analysis=None, phenology_data=None, decay_data=None, spatial_data=None):
+def generate_pdf_report(original_img, heatmap_img, prediction_data, disease_info, cv_analysis=None, epidemiology_data=None, spectral_analysis=None, phenology_data=None, decay_data=None, spatial_data=None, soil_data=None):
     """
     Generates an enterprise PDF diagnostic report for a prediction.
     
@@ -61,6 +61,7 @@ def generate_pdf_report(original_img, heatmap_img, prediction_data, disease_info
         phenology_data: optional dict containing GDD thermal accumulation and stage advisory.
         decay_data: optional dict containing fungicide residue kinetics and re-spray advisory.
         spatial_data: optional dict containing VRA spatial mapping and chemical savings metrics.
+        soil_data: optional dict containing soilborne pathogen risk, suppressiveness, and seed prescriptions.
         
     Returns:
         str: Path to the generated PDF file.
@@ -260,6 +261,23 @@ def generate_pdf_report(original_img, heatmap_img, prediction_data, disease_info
                 f"Economic Savings: ${econ.get('dollars_saved', 0.0):.2f} total (${econ.get('savings_per_acre', 0.0):.2f}/acre)"
             )
             add_presc_section("Precision Variable-Rate (VRA) Spatial Lot Prescription:", spatial_text, title_color=(16, 185, 129))
+
+        if soil_data:
+            prim = soil_data.get("primary_pathogen", {})
+            presc = soil_data.get("prescription", {})
+            chem_seed = presc.get("chemical_seed_treatment", {})
+            bio_seed = presc.get("biological_seed_treatment", {})
+            drench = presc.get("in_furrow_drench_prescription", {})
+            soil_text = (
+                f"Primary Soil Threat: {prim.get('common_name', 'Pythium Seed Rot & Damping-Off')} ({prim.get('risk_tier', 'MODERATE')})\n"
+                f"Field Hazard Index: {soil_data.get('overall_risk_score', 0.0)}/100 ({soil_data.get('overall_tier', 'MODERATE')})\n"
+                f"Soil Suppressiveness: {soil_data.get('suppressiveness_score', 50.0)}/100 ({soil_data.get('suppressiveness_level', 'MODERATELY SUPPRESSIVE')})\n"
+                f"Emergence Horizon: {soil_data.get('projected_emergence_days', 5.0)} Days (Vulnerability Multiplier: {soil_data.get('exposure_vulnerability_index', 1.0)}x)\n"
+                f"Chemical Seed Shield: {chem_seed.get('primary_active', 'Mefenoxam + Fludioxonil')} ({chem_seed.get('frac_code', 'FRAC 4/12')})\n"
+                f"Biological Inoculant: {bio_seed.get('active_biologicals', 'Trichoderma + Bacillus')} @ {bio_seed.get('slurry_rate', '4-6 g/kg')}\n"
+                f"In-Furrow Chemigation: {drench.get('product_name', 'Oxathiapiprolin + Mefenoxam')} @ {drench.get('dose_rate', '140-280 mL/ha')}"
+            )
+            add_presc_section("Soilborne Pathogen & Seedling Damping-Off Regimen:", soil_text, title_color=(234, 88, 12))
 
         add_presc_section("Environmental Triggers & Causes:", disease_info.get("causes", "N/A"))
         add_presc_section("Immediate Containment Steps (First-Aid):", disease_info.get("immediate_actions", "N/A"), title_color=(185, 28, 28))
