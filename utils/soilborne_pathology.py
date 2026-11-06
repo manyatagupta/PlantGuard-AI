@@ -465,3 +465,296 @@ def calculate_soilborne_pathogen_risk(
         "pathogen_breakdown": pathogen_results
     }
 
+
+def evaluate_soil_biological_suppressiveness(
+    soil_organic_matter_pct: float,
+    soil_ph: float,
+    beneficials_inoculated: bool = False,
+    crop_rotation_years: int = 2,
+    tillage_practice: str = "Reduced / Minimum Till",
+    active_pathogen: str = "Pythium_ultimum"
+) -> Dict[str, Any]:
+    """
+    Evaluates the quantitative biological disease suppressiveness (0-100) of the soil ecosystem.
+    
+    Suppressive soils possess intrinsic microbial communities, biological carbon networks,
+    and enzymatic activity (FDA hydrolysis, beta-glucosidase) capable of choking out virulent
+    chlamydospores, zoospores, and sclerotia.
+    
+    Scoring Weighting:
+    - Soil Organic Matter (SOM %): 30 points (optimal 3.5% - 6.0%)
+    - Microbial Inoculants (Trichoderma, Bacillus): 25 points
+    - Crop Rotation Depth: 25 points (3+ years breaking solanaceous/cucurbit cycles)
+    - Tillage & Mycorrhizal Integrity: 10 points (No-till > Reduced Till > Deep Inversion)
+    - Soil pH Optimality for Biological Buffering: 10 points (6.2 - 7.0 optimal)
+    """
+    score = 0.0
+    diagnostics: List[str] = []
+    
+    # 1. Soil Organic Matter (SOM %) evaluation (0 - 30 pts)
+    if soil_organic_matter_pct >= 5.0:
+        som_pts = 30.0
+        diagnostics.append("Superior organic matter reservoir (>5.0% SOM) supporting active microbial biomass carbon.")
+    elif soil_organic_matter_pct >= 3.5:
+        som_pts = 25.0
+        diagnostics.append("Optimal soil organic matter (3.5% - 5.0% SOM) fostering microbial competition.")
+    elif soil_organic_matter_pct >= 2.0:
+        som_pts = 16.0
+        diagnostics.append("Moderate organic matter (2.0% - 3.4% SOM); supplemental humic amendment recommended.")
+    else:
+        som_pts = 6.0
+        diagnostics.append("Depleted soil organic matter (<2.0% SOM) limits general microbial disease suppression.")
+    score += som_pts
+    
+    # 2. Beneficial biological inoculants (0 - 25 pts)
+    if beneficials_inoculated:
+        bio_pts = 25.0
+        diagnostics.append("Active biological seed coating / furrow inoculants (Trichoderma / Bacillus) present.")
+    else:
+        bio_pts = 5.0
+        diagnostics.append("No recorded biocontrol antagonist inoculations; reliant solely on native microflora.")
+    score += bio_pts
+    
+    # 3. Crop Rotation Depth (0 - 25 pts)
+    if crop_rotation_years >= 4:
+        rot_pts = 25.0
+        diagnostics.append("Extended 4+ year non-host crop rotation severely breaks resting spore survival.")
+    elif crop_rotation_years == 3:
+        rot_pts = 20.0
+        diagnostics.append("3-year crop rotation significantly attenuates soil inoculum density.")
+    elif crop_rotation_years == 2:
+        rot_pts = 12.0
+        diagnostics.append("2-year rotation provides moderate sanitation; short fallow breaks sustain resting structures.")
+    else:
+        rot_pts = 2.0
+        diagnostics.append("Monoculture / <1 year break: Inoculum carryover risk is dangerously compounded.")
+    score += rot_pts
+    
+    # 4. Tillage Practice & Mycorrhizal Soil Crust (0 - 10 pts)
+    tillage_lower = tillage_practice.lower()
+    if "no-till" in tillage_lower or "zero" in tillage_lower:
+        till_pts = 10.0
+        diagnostics.append("No-till management preserves intact arbuscular mycorrhizal networks and predatory nematodes.")
+    elif "reduced" in tillage_lower or "minimum" in tillage_lower or "strip" in tillage_lower:
+        till_pts = 8.0
+        diagnostics.append("Minimum tillage balances residue incorporation while conserving biological soil structure.")
+    else:
+        till_pts = 3.0
+        diagnostics.append("Intensive inversion moldboard plowing shears mycorrhizal hyphae and accelerates carbon oxidation.")
+    score += till_pts
+    
+    # 5. Soil pH Buffering (0 - 10 pts)
+    # Check specific pathogen interaction: Fusarium thrives in acid soils; Verticillium in alkaline
+    path_data = SOILBORNE_PATHOGENS_DATABASE.get(active_pathogen, {})
+    fav_ph_min, fav_ph_max = path_data.get("favored_ph_range", (5.5, 7.5))
+    
+    if 6.2 <= soil_ph <= 7.2:
+        ph_pts = 10.0
+        diagnostics.append(f"Near-neutral soil pH ({soil_ph:.1f}) optimizes nutrient availability and beneficial bacterial diversity.")
+    elif 5.5 <= soil_ph < 6.2 or 7.2 < soil_ph <= 7.8:
+        ph_pts = 6.0
+        diagnostics.append(f"Sub-optimal soil pH ({soil_ph:.1f}) slightly favors fungal colonization over actinomycetes.")
+    else:
+        ph_pts = 2.0
+        diagnostics.append(f"Extreme soil pH ({soil_ph:.1f}) impairs root barrier resilience and severely restricts beneficial bacteria.")
+    score += ph_pts
+    
+    final_suppressiveness_score = round(float(min(100.0, max(0.0, score))), 1)
+    
+    if final_suppressiveness_score >= 80.0:
+        level = "HIGHLY DISEASE-SUPPRESSIVE"
+        desc = "Field biology actively chokes out soilborne pathogen hyphae and rapidly parasitizes resting spores."
+        badge_color = "#16a34a"
+    elif final_suppressiveness_score >= 60.0:
+        level = "MODERATELY SUPPRESSIVE"
+        desc = "Balanced biological buffering provides strong secondary line of defense alongside cultural practices."
+        badge_color = "#2563eb"
+    elif final_suppressiveness_score >= 40.0:
+        level = "MODERATELY CONDUCIVE"
+        desc = "Biological buffering is insufficient to arrest inoculum during saturated or extreme temperature spikes."
+        badge_color = "#d97706"
+    else:
+        level = "HIGHLY DISEASE-CONDUCIVE"
+        desc = "Soil microflora cannot impede infection; chemical seed coating and furrow drenching are mandatory."
+        badge_color = "#dc2626"
+        
+    return {
+        "suppressiveness_score": final_suppressiveness_score,
+        "suppressiveness_level": level,
+        "suppressiveness_color": badge_color,
+        "score_components": {
+            "organic_matter_score": som_pts,
+            "biological_inoculants_score": bio_pts,
+            "crop_rotation_score": rot_pts,
+            "tillage_integrity_score": till_pts,
+            "ph_buffering_score": ph_pts
+        },
+        "soil_ph": soil_ph,
+        "soil_organic_matter_pct": soil_organic_matter_pct,
+        "tillage_practice": tillage_practice,
+        "crop_rotation_years": crop_rotation_years,
+        "beneficials_inoculated": beneficials_inoculated,
+        "diagnostic_rationale": diagnostics,
+        "suppressiveness_summary": desc
+    }
+
+
+def prescribe_seed_and_drench_regimen(
+    target_pathogen_key: str,
+    crop: str = "Tomato",
+    farming_type: str = "Conventional"
+) -> Dict[str, Any]:
+    """
+    Formulates a targeted agronomic prescription for seed treatments, in-furrow chemigation,
+    and biofumigation cover crops based on pathogen etiology and production philosophy.
+    """
+    path_data = SOILBORNE_PATHOGENS_DATABASE.get(target_pathogen_key, SOILBORNE_PATHOGENS_DATABASE["Pythium_ultimum"])
+    is_oomycete = path_data["organism_class"] == "Oomycete"
+    
+    # 1. Biological Seed Treatment Recipe
+    bio_seed_recipe = {
+        "active_biologicals": "Trichoderma asperellum + Bacillus amyloliquefaciens strain D747",
+        "viable_spore_count": "1.0 x 10^9 CFU/gram of formulation",
+        "slurry_rate": "4.0 to 6.0 g per 1 kg of seed (with 1% methylcellulose sticker)",
+        "mode_of_action": "Competitive root rhizosphere colonization, siderophore iron chelation, and cell-wall chitinase excretion",
+        "application_window": "Slurry coat 2-4 hours prior to drilling; keep shaded at <25°C"
+    }
+    
+    # 2. Chemical Protectant Seed Treatment
+    if is_oomycete:
+        chem_seed_recipe = {
+            "primary_active": "Mefenoxam (Metalaxyl-M)",
+            "frac_code": "FRAC 4 (Phenylamides)",
+            "partner_active": "Fludioxonil (FRAC 12)",
+            "target_dose": "0.15 - 0.30 mL a.i. per 1 kg seed",
+            "spectrum": "Broad-spectrum control against Pythium damping-off, Phytophthora root rot, and secondary Fusarium seed decay",
+            "resistance_stewardship": "Strict limit of 1 seed treatment application per season; do not follow with foliar FRAC 4"
+        }
+        furrow_drench_recipe = {
+            "product_name": "Oxathiapiprolin (FRAC 49) + Mefenoxam (FRAC 4) Co-Pack",
+            "application_method": "In-Furrow Chemigation / Subsurface Drip Drench",
+            "dose_rate": "140 - 280 mL/hectare (or 2.5 mL per 100 row-meters)",
+            "water_carrier_volume": "200 - 400 L/ha water carrier for optimal root-zone infiltration",
+            "timing": "Immediately at transplanting or seedling emergence within 48 hours of drilling"
+        }
+    else:
+        # Fungal pathogen (Rhizoctonia / Fusarium / Macrophomina)
+        chem_seed_recipe = {
+            "primary_active": "Sedaxane (FRAC 7, SDHI) + Fludioxonil (FRAC 12)",
+            "frac_code": "FRAC 7 + FRAC 12 dual-site protection",
+            "partner_active": "Azoxystrobin (FRAC 11)",
+            "target_dose": "0.20 - 0.45 mL a.i. per 1 kg seed",
+            "spectrum": "Shields seedling crown against Rhizoctonia wirestem, Fusarium vascular foot rot, and seedling blights",
+            "resistance_stewardship": "Rotate seedling root drenches with FRAC 3 (Difenoconazole) or bio-fungicides"
+        }
+        furrow_drench_recipe = {
+            "product_name": "Fluxapyroxad + Pyraclostrobin (FRAC 7 + FRAC 11)",
+            "application_method": "Directed In-Furrow T-Band Spray",
+            "dose_rate": "300 - 450 mL/hectare directed into open furrow ahead of press wheel",
+            "water_carrier_volume": "100 - 150 L/ha concentrated band",
+            "timing": "At planting in-furrow or via post-transplant directed crown drench"
+        }
+        
+    # 3. Biofumigation & Soil Sanitation Prescription
+    biofumigation_plan = {
+        "cover_crop_species": "Brown Mustard (Brassica juncea cv. Caliente 199) or Oilseed Radish",
+        "seeding_rate": "9.0 - 12.0 kg/ha drilled into warm moist seedbed",
+        "termination_timing": "Mow and flail-chop at 50% early flowering stage when glucosinolate tissue content peaks",
+        "incorporation_protocol": (
+            "Immediately rotary till / disc chop into the top 15-20 cm within 15 minutes of shredding. "
+            "Immediately roll and pack soil or apply 15-20 mm overhead irrigation to seal gaseous "
+            "allyl-isothiocyanates (AITC) in the soil profile."
+        ),
+        "solarization_option": "In high-heat regions, cover with clear UV-stabilized 0.05 mm polyethylene mulch for 4-6 weeks."
+    }
+    
+    return {
+        "target_pathogen": path_data["common_name"],
+        "target_pathogen_key": target_pathogen_key,
+        "crop": crop,
+        "farming_type": farming_type,
+        "biological_seed_treatment": bio_seed_recipe,
+        "chemical_seed_treatment": chem_seed_recipe,
+        "in_furrow_drench_prescription": furrow_drench_recipe,
+        "biofumigation_protocol": biofumigation_plan
+    }
+
+
+def generate_suppressiveness_radar_data(suppressiveness_result: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Formats multi-axial radar / spider plot metrics for biological soil health visualization.
+    Normalized to a 0-100 scale across all 5 key soil defense dimensions.
+    """
+    comps = suppressiveness_result.get("score_components", {})
+    
+    # Normalize each component to 0-100%
+    om_norm = min(100.0, (comps.get("organic_matter_score", 0.0) / 30.0) * 100.0)
+    bio_norm = min(100.0, (comps.get("biological_inoculants_score", 0.0) / 25.0) * 100.0)
+    rot_norm = min(100.0, (comps.get("crop_rotation_score", 0.0) / 25.0) * 100.0)
+    till_norm = min(100.0, (comps.get("tillage_integrity_score", 0.0) / 10.0) * 100.0)
+    ph_norm = min(100.0, (comps.get("ph_buffering_score", 0.0) / 10.0) * 100.0)
+    
+    categories = [
+        "Organic Matter Reserve",
+        "Biocontrol Inoculum",
+        "Crop Rotation Depth",
+        "Tillage / Mycorrhizal Integrity",
+        "Soil pH Buffering"
+    ]
+    values = [round(om_norm, 1), round(bio_norm, 1), round(rot_norm, 1), round(till_norm, 1), round(ph_norm, 1)]
+    
+    return {
+        "categories": categories,
+        "values": values,
+        "overall_score": suppressiveness_result.get("suppressiveness_score", 50.0),
+        "suppressiveness_level": suppressiveness_result.get("suppressiveness_level", "MODERATE")
+    }
+
+
+def export_soilborne_assessment_json(
+    risk_assessment: Dict[str, Any],
+    suppressiveness_assessment: Dict[str, Any],
+    prescription: Dict[str, Any]
+) -> str:
+    """
+    Exports a comprehensive, structured RFC-8259 JSON audit string
+    for integration into digital farm management systems (FMIS).
+    """
+    import json
+    import datetime
+    
+    payload = {
+        "audit_metadata": {
+            "schema": "PlantGuard-SoilPathology-v1.0",
+            "timestamp_utc": datetime.datetime.utcnow().isoformat() + "Z",
+            "evaluator": "PlantGuard AI Bio-Epidemiology Engine"
+        },
+        "soil_telemetry": {
+            "soil_temperature_c": risk_assessment.get("soil_temperature_c"),
+            "soil_moisture_fc_pct": risk_assessment.get("soil_moisture_fc_pct"),
+            "soil_texture": risk_assessment.get("soil_texture"),
+            "compaction_level": risk_assessment.get("compaction_level"),
+            "crop": risk_assessment.get("crop")
+        },
+        "epidemiological_risk": {
+            "overall_risk_score": risk_assessment.get("overall_risk_score"),
+            "overall_tier": risk_assessment.get("overall_tier"),
+            "primary_pathogen": risk_assessment.get("primary_pathogen_key"),
+            "projected_emergence_days": risk_assessment.get("projected_emergence_days"),
+            "exposure_vulnerability_index": risk_assessment.get("exposure_vulnerability_index"),
+            "pathogens": risk_assessment.get("pathogen_breakdown")
+        },
+        "biological_suppressiveness": {
+            "suppressiveness_score": suppressiveness_assessment.get("suppressiveness_score"),
+            "suppressiveness_level": suppressiveness_assessment.get("suppressiveness_level"),
+            "soil_ph": suppressiveness_assessment.get("soil_ph"),
+            "soil_organic_matter_pct": suppressiveness_assessment.get("soil_organic_matter_pct"),
+            "rotation_years": suppressiveness_assessment.get("crop_rotation_years"),
+            "tillage_practice": suppressiveness_assessment.get("tillage_practice"),
+            "beneficials_inoculated": suppressiveness_assessment.get("beneficials_inoculated"),
+            "rationales": suppressiveness_assessment.get("diagnostic_rationale")
+        },
+        "agronomic_prescription": prescription
+    }
+    
+    return json.dumps(payload, indent=2)
