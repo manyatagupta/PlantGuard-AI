@@ -1197,6 +1197,214 @@ class TestSpatialMappingAndVariableRatePrescription(unittest.TestCase):
         self.assertLess(acres, 100.0)
 
 
+class TestSoilbornePathologyAndDampingOff(unittest.TestCase):
+    """Automated tests for Soilborne Pathogen & Seedling Damping-Off Engine."""
+
+    def test_soilborne_pathogens_database_integrity(self):
+        from utils.soilborne_pathology import SOILBORNE_PATHOGENS_DATABASE
+        expected_keys = [
+            "Pythium_ultimum",
+            "Pythium_aphanidermatum",
+            "Rhizoctonia_solani",
+            "Fusarium_oxysporum",
+            "Phytophthora_capsici",
+            "Verticillium_dahliae",
+            "Macrophomina_phaseolina"
+        ]
+        for key in expected_keys:
+            self.assertIn(key, SOILBORNE_PATHOGENS_DATABASE)
+            entry = SOILBORNE_PATHOGENS_DATABASE[key]
+            self.assertIn("common_name", entry)
+            self.assertIn("organism_class", entry)
+            self.assertLess(entry["temp_min_c"], entry["temp_opt_c"])
+            self.assertLess(entry["temp_opt_c"], entry["temp_max_c"])
+            self.assertGreater(len(entry["primary_symptoms"]), 0)
+            self.assertIn("frac_chemical_group", entry)
+
+    def test_cardinal_temperature_thermal_suitability(self):
+        from utils.soilborne_pathology import calculate_thermal_suitability
+        # Pythium ultimum: min 8, opt 17.5, max 26
+        suit_opt = calculate_thermal_suitability(17.5, 8.0, 17.5, 26.0)
+        self.assertAlmostEqual(suit_opt, 1.0, places=2)
+
+        suit_min = calculate_thermal_suitability(7.0, 8.0, 17.5, 26.0)
+        self.assertEqual(suit_min, 0.0)
+
+        suit_max = calculate_thermal_suitability(27.0, 8.0, 17.5, 26.0)
+        self.assertEqual(suit_max, 0.0)
+
+        suit_mid = calculate_thermal_suitability(14.0, 8.0, 17.5, 26.0)
+        self.assertGreater(suit_mid, 0.5)
+        self.assertLess(suit_mid, 1.0)
+
+    def test_moisture_suitability_and_oomycete_motility(self):
+        from utils.soilborne_pathology import calculate_moisture_suitability
+        # Oomycete at 90% FC (saturated) -> high zoospore motility
+        m_suit, z_mot = calculate_moisture_suitability(90.0, 75.0, 100.0, is_oomycete=True)
+        self.assertGreaterEqual(m_suit, 0.9)
+        self.assertGreater(z_mot, 0.7)
+
+        # Fungal pathogen (non-oomycete) -> no zoospores
+        m_suit_f, z_mot_f = calculate_moisture_suitability(60.0, 45.0, 75.0, is_oomycete=False)
+        self.assertAlmostEqual(m_suit_f, 1.0, places=1)
+        self.assertEqual(z_mot_f, 0.0)
+
+    def test_soilborne_risk_calculation(self):
+        from utils.soilborne_pathology import calculate_soilborne_pathogen_risk
+        # Cold, wet soil favoring Pythium ultimum
+        res = calculate_soilborne_pathogen_risk(
+            soil_temp_c=17.0,
+            soil_moisture_fc_pct=92.0,
+            soil_texture="Clay",
+            compaction_level="Moderate",
+            crop="Tomato",
+            seed_depth_cm=3.0
+        )
+        self.assertIn("overall_risk_score", res)
+        self.assertIn("overall_tier", res)
+        self.assertIn("primary_pathogen_key", res)
+        self.assertIn("pathogen_breakdown", res)
+        self.assertEqual(res["primary_pathogen_key"], "Pythium_ultimum")
+        self.assertGreater(res["overall_risk_score"], 60.0)
+        self.assertIn("CRITICAL", res["overall_tier"].upper() + res["primary_pathogen"]["risk_tier"].upper())
+
+    def test_soil_compaction_and_emergence_penalty(self):
+        from utils.soilborne_pathology import calculate_soilborne_pathogen_risk
+        res_loose = calculate_soilborne_pathogen_risk(
+            soil_temp_c=22.0,
+            soil_moisture_fc_pct=60.0,
+            compaction_level="Low / Loose",
+            seed_depth_cm=2.5
+        )
+        res_compact = calculate_soilborne_pathogen_risk(
+            soil_temp_c=22.0,
+            soil_moisture_fc_pct=60.0,
+            compaction_level="Severe / Plow-Pan",
+            seed_depth_cm=5.0
+        )
+        self.assertGreater(res_compact["projected_emergence_days"], res_loose["projected_emergence_days"])
+        self.assertGreater(res_compact["exposure_vulnerability_index"], res_loose["exposure_vulnerability_index"])
+
+    def test_biological_suppressiveness_scoring(self):
+        from utils.soilborne_pathology import evaluate_soil_biological_suppressiveness
+        # High suppressive profile
+        res_supp = evaluate_soil_biological_suppressiveness(
+            soil_organic_matter_pct=5.5,
+            soil_ph=6.8,
+            beneficials_inoculated=True,
+            crop_rotation_years=4,
+            tillage_practice="No-Till / Direct Drill"
+        )
+        self.assertGreaterEqual(res_supp["suppressiveness_score"], 80.0)
+        self.assertEqual(res_supp["suppressiveness_level"], "HIGHLY DISEASE-SUPPRESSIVE")
+
+        # Conducive depleted profile
+        res_cond = evaluate_soil_biological_suppressiveness(
+            soil_organic_matter_pct=1.2,
+            soil_ph=5.0,
+            beneficials_inoculated=False,
+            crop_rotation_years=1,
+            tillage_practice="Conventional Deep Inversion Moldboard"
+        )
+        self.assertLess(res_cond["suppressiveness_score"], 40.0)
+        self.assertEqual(res_cond["suppressiveness_level"], "HIGHLY DISEASE-CONDUCIVE")
+
+    def test_seed_and_drench_regimens(self):
+        from utils.soilborne_pathology import prescribe_seed_and_drench_regimen
+        # Oomycete prescription
+        rx_pyth = prescribe_seed_and_drench_regimen("Pythium_ultimum", crop="Tomato")
+        self.assertIn("Mefenoxam", rx_pyth["chemical_seed_treatment"]["primary_active"])
+        self.assertIn("FRAC 4", rx_pyth["chemical_seed_treatment"]["frac_code"])
+        self.assertIn("Trichoderma", rx_pyth["biological_seed_treatment"]["active_biologicals"])
+        self.assertIn("Brown Mustard", rx_pyth["biofumigation_protocol"]["cover_crop_species"])
+
+        # Basidiomycete prescription
+        rx_rhiz = prescribe_seed_and_drench_regimen("Rhizoctonia_solani", crop="Potato")
+        self.assertIn("Sedaxane", rx_rhiz["chemical_seed_treatment"]["primary_active"])
+        self.assertIn("FRAC 7", rx_rhiz["chemical_seed_treatment"]["frac_code"])
+
+    def test_radar_and_json_export(self):
+        from utils.soilborne_pathology import (
+            calculate_soilborne_pathogen_risk,
+            evaluate_soil_biological_suppressiveness,
+            prescribe_seed_and_drench_regimen,
+            generate_suppressiveness_radar_data,
+            export_soilborne_assessment_json
+        )
+        import json
+
+        risk_res = calculate_soilborne_pathogen_risk(20.0, 70.0, "Silt Loam", "Moderate", "Tomato")
+        supp_res = evaluate_soil_biological_suppressiveness(3.5, 6.5, True, 3, "Reduced / Minimum Till")
+        presc_res = prescribe_seed_and_drench_regimen("Pythium_ultimum", "Tomato")
+
+        radar = generate_suppressiveness_radar_data(supp_res)
+        self.assertEqual(len(radar["categories"]), 5)
+        self.assertEqual(len(radar["values"]), 5)
+        for val in radar["values"]:
+            self.assertGreaterEqual(val, 0.0)
+            self.assertLessEqual(val, 100.0)
+
+        json_str = export_soilborne_assessment_json(risk_res, supp_res, presc_res)
+        parsed = json.loads(json_str)
+        self.assertIn("audit_metadata", parsed)
+        self.assertIn("soil_telemetry", parsed)
+        self.assertIn("epidemiological_risk", parsed)
+        self.assertIn("biological_suppressiveness", parsed)
+        self.assertIn("agronomic_prescription", parsed)
+
+    def test_pdf_report_with_soil_data(self):
+        from utils.pdf_generator import generate_pdf_report
+        from utils.soilborne_pathology import (
+            calculate_soilborne_pathogen_risk,
+            evaluate_soil_biological_suppressiveness,
+            prescribe_seed_and_drench_regimen
+        )
+        img = Image.new("RGB", (256, 256), color=(40, 160, 40))
+        pred_data = {
+            "predicted_class": "Tomato___Early_blight",
+            "confidence": 0.94,
+            "is_healthy": False,
+            "all_probabilities": {"Tomato___Early_blight": 0.94, "Tomato___healthy": 0.06}
+        }
+        disease_info = {
+            "disease_name": "Tomato Early Blight",
+            "description": "Fungal infection caused by Alternaria solani.",
+            "symptoms": "Concentric rings and brown target lesions on lower foliage.",
+            "causes": "Warm temperatures and high humidity.",
+            "immediate_actions": "Prune lower infected leaves.",
+            "organic_treatment": "Copper octanoate.",
+            "chemical_treatment": ["Chlorothalonil", "Mancozeb"],
+            "preventive_measures": ["Drip irrigation", "Crop rotation"],
+            "nutrition_and_care": "Avoid excess nitrogen."
+        }
+        risk_res = calculate_soilborne_pathogen_risk(19.0, 80.0, "Clay Loam", "Moderate", "Tomato")
+        supp_res = evaluate_soil_biological_suppressiveness(4.0, 6.6, True, 3, "Reduced / Minimum Till")
+        presc_res = prescribe_seed_and_drench_regimen("Pythium_ultimum", "Tomato")
+        soil_payload = {
+            "overall_risk_score": risk_res["overall_risk_score"],
+            "overall_tier": risk_res["overall_tier"],
+            "primary_pathogen": risk_res["primary_pathogen"],
+            "projected_emergence_days": risk_res["projected_emergence_days"],
+            "exposure_vulnerability_index": risk_res["exposure_vulnerability_index"],
+            "suppressiveness_score": supp_res["suppressiveness_score"],
+            "suppressiveness_level": supp_res["suppressiveness_level"],
+            "prescription": presc_res
+        }
+        pdf_path = generate_pdf_report(
+            original_img=img,
+            heatmap_img=None,
+            prediction_data=pred_data,
+            disease_info=disease_info,
+            soil_data=soil_payload
+        )
+        self.assertTrue(os.path.exists(pdf_path))
+        self.assertGreater(os.path.getsize(pdf_path), 1000)
+        try:
+            os.remove(pdf_path)
+        except OSError:
+            pass
+
+
 if __name__ == "__main__":
     unittest.main()
 
