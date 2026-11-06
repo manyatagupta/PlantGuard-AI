@@ -3313,6 +3313,24 @@ def main():
                                 "prescription": soil_presc_summary
                             }
                             
+                            # FAO-56 Evapotranspiration & CWSI Context
+                            et0_diag = calculate_fao56_penman_monteith(temp_mean_c=22.5, relative_humidity_pct=60.0)
+                            cwsi_diag = calculate_crop_water_stress_index(canopy_temp_c=23.0, air_temp_c=22.5, vpd_kpa=et0_diag["vapor_pressure_deficit_kpa"], crop=crop_detected)
+                            irrig_sched_diag = optimize_irrigation_and_disease_schedule(
+                                crop=crop_detected,
+                                growth_stage="Mid-Season / Fruit Bulking",
+                                et0_mm_day=et0_diag["et0_mm_day"],
+                                effective_rainfall_mm=0.0,
+                                delivery_system="Subsurface Drip",
+                                target_area_ha=1.0,
+                                planned_irrigation_time="05:00 AM (Dawn)"
+                            )
+                            irrig_payload = {
+                                "et0": et0_diag,
+                                "cwsi": cwsi_diag,
+                                "schedule": irrig_sched_diag
+                            }
+                            
                             pdf_path = generate_pdf_report(
                                 image, heatmap_img, results, info, 
                                 cv_analysis=cv_analysis,
@@ -3321,7 +3339,8 @@ def main():
                                 phenology_data=pheno_res,
                                 decay_data=decay_profile,
                                 spatial_data=spatial_summary,
-                                soil_data=soil_data_summary
+                                soil_data=soil_data_summary,
+                                irrigation_data=irrig_payload
                             )
                             with open(pdf_path, "rb") as f:
                                 st.download_button(
@@ -3337,13 +3356,14 @@ def main():
                             
                             # Visual Tabs for Inspection
                             st.markdown("#### 🔬 Detailed Visual & Pathological Inspection")
-                            vtab1, vtab2, vtab3, vtab4, vtab5, vtab6, vtab7 = st.tabs([
+                            vtab1, vtab2, vtab3, vtab4, vtab5, vtab6, vtab7, vtab8 = st.tabs([
                                 "🧠 AI Focus (Grad-CAM)",
                                 "🔬 CV Lesion Segmentation",
                                 "🌿 Spectral Chlorophyll & Biometrics",
                                 "🌡️ Pathogen GDD Phenology",
                                 "⏳ Chemical Barrier & Rainfastness",
                                 "🌱 Soilborne Risk & Seed Coating",
+                                "💧 Crop Water Stress & Irrigation Timing",
                                 "📊 Probabilities"
                             ])
                             
@@ -3422,6 +3442,19 @@ def main():
                                     st.success(f"**Drench / Chemigation:**\n{soil_presc_summary.get('in_furrow_drench_prescription', {}).get('product_name', 'Mefenoxam')} @ {soil_presc_summary.get('in_furrow_drench_prescription', {}).get('dose_rate', '140 mL/ha')}")
 
                             with vtab7:
+                                st.markdown(f"##### 💧 Canopy Transpiration & Irrigation Bio-Hazard ({crop_detected})")
+                                col_irb1, col_irb2 = st.columns([1.2, 1], gap="medium")
+                                with col_irb1:
+                                    st.markdown(f"**Crop Water Stress Index (CWSI):** <span style='color:{cwsi_diag['color']}; font-weight:800; font-size:1.15rem;'>{cwsi_diag['cwsi']}</span> — `{cwsi_diag['status'].split('/')[0]}'`", unsafe_allow_html=True)
+                                    st.markdown(f"**Canopy Delta T (Tc - Ta):** `{cwsi_diag['temp_depression_delta_t']}°C` (Tc: {cwsi_diag['canopy_temp_c']}°C | Ta: {cwsi_diag['air_temp_c']}°C)")
+                                    st.markdown(f"**Daily Evapotranspiration (ETc):** `{irrig_sched_diag['actual_crop_etc_mm']} mm/day` (Reference ET0: {et0_diag['et0_mm_day']} mm/d)")
+                                    st.markdown(f"**Prescribed Irrigation Volume:** `{irrig_sched_diag['volume_m3']} m³/ha` (~{irrig_sched_diag['gross_irrigation_mm']} mm depth)")
+                                with col_irb2:
+                                    st.markdown(f"**Delivery Method:** `{irrig_sched_diag['delivery_system']}` (Runtime: ~{irrig_sched_diag['system_runtime_hours']}h)")
+                                    st.markdown(f"**Disease Risk Multiplier:** <span style='color:{irrig_sched_diag['pathology_color']}; font-weight:800;'>{irrig_sched_diag['combined_disease_hazard_multiplier']}x</span>", unsafe_allow_html=True)
+                                    st.info('**Timing Window Advisory:** ' + str(irrig_sched_diag['timing_risk_status']) + ' - ' + str(irrig_sched_diag['timing_advisory']))
+
+                            with vtab8:
                                 st.markdown("##### 🔬 Top Differential Diagnoses:")
                                 if results.get("top_3"):
                                     for t_rank, t_item in enumerate(results["top_3"], 1):
