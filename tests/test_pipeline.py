@@ -1405,6 +1405,182 @@ class TestSoilbornePathologyAndDampingOff(unittest.TestCase):
             pass
 
 
+class TestEvapotranspirationAndCropWaterStress(unittest.TestCase):
+    """Automated tests for FAO-56 Penman-Monteith, CWSI & Disease-Irrigation Scheduler."""
+
+    def test_crop_coefficients_database_integrity(self):
+        from utils.evapotranspiration_cwsi import CROP_COEFFICIENT_DATABASE
+        expected_crops = ["Tomato", "Potato", "Pepper", "Apple", "Corn", "Grape", "Strawberry"]
+        for crop in expected_crops:
+            self.assertIn(crop, CROP_COEFFICIENT_DATABASE)
+            cdata = CROP_COEFFICIENT_DATABASE[crop]
+            self.assertIn("kc_ini", cdata)
+            self.assertIn("kc_mid", cdata)
+            self.assertIn("kc_end", cdata)
+            self.assertGreater(cdata["kc_mid"], cdata["kc_ini"])
+            self.assertGreater(cdata["max_rooting_depth_m"], 0.2)
+            self.assertGreater(cdata["depletion_fraction_p"], 0.1)
+            self.assertLess(cdata["depletion_fraction_p"], 0.8)
+            self.assertIn("idso_nwsb_intercept_a", cdata)
+            self.assertIn("idso_nwsb_slope_b", cdata)
+            self.assertIn("idso_upper_limit_deg_c", cdata)
+
+    def test_fao56_penman_monteith_baseline(self):
+        from utils.evapotranspiration_cwsi import calculate_fao56_penman_monteith
+        res = calculate_fao56_penman_monteith(
+            temp_mean_c=20.0,
+            relative_humidity_pct=50.0,
+            solar_radiation_mj_m2_day=20.0,
+            wind_speed_2m_m_s=2.0,
+            elevation_m=100.0
+        )
+        self.assertIn("et0_mm_day", res)
+        self.assertGreaterEqual(res["et0_mm_day"], 3.5)
+        self.assertLessEqual(res["et0_mm_day"], 7.5)
+        self.assertGreater(res["vapor_pressure_deficit_kpa"], 0.5)
+        self.assertGreater(res["slope_vapor_pressure_delta"], 0.1)
+        self.assertGreater(res["psychrometric_constant_gamma"], 0.05)
+        self.assertGreater(res["radiation_component_mm"], 0.0)
+        self.assertGreater(res["aerodynamic_component_mm"], 0.0)
+
+    def test_fao56_temperature_and_radiation_sensitivity(self):
+        from utils.evapotranspiration_cwsi import calculate_fao56_penman_monteith
+        res_cool = calculate_fao56_penman_monteith(temp_mean_c=12.0, relative_humidity_pct=70.0, solar_radiation_mj_m2_day=12.0)
+        res_hot = calculate_fao56_penman_monteith(temp_mean_c=32.0, relative_humidity_pct=35.0, solar_radiation_mj_m2_day=26.0)
+        self.assertGreater(res_hot["et0_mm_day"], res_cool["et0_mm_day"])
+        self.assertGreater(res_hot["vapor_pressure_deficit_kpa"], res_cool["vapor_pressure_deficit_kpa"])
+
+    def test_crop_water_stress_index_calculation(self):
+        from utils.evapotranspiration_cwsi import calculate_crop_water_stress_index
+        # Well-watered transpiring canopy: Tc cooler than Ta
+        res_cool_canopy = calculate_crop_water_stress_index(
+            canopy_temp_c=21.0,
+            air_temp_c=25.0,
+            vpd_kpa=1.5,
+            crop="Tomato"
+        )
+        self.assertLessEqual(res_cool_canopy["cwsi"], 0.25)
+        self.assertIn("NO STRESS", res_cool_canopy["status"])
+
+        # Stressed heated canopy: Tc significantly warmer than Ta
+        res_hot_canopy = calculate_crop_water_stress_index(
+            canopy_temp_c=31.0,
+            air_temp_c=26.0,
+            vpd_kpa=1.5,
+            crop="Tomato"
+        )
+        self.assertGreaterEqual(res_hot_canopy["cwsi"], 0.70)
+        self.assertTrue(any(k in (res_hot_canopy["status"] + " " + res_hot_canopy["advisory"]).upper() for k in ["STRESS", "DESICCATION", "HAZARD"]))
+
+    def test_cwsi_bounds_and_clamping(self):
+        from utils.evapotranspiration_cwsi import calculate_crop_water_stress_index
+        res_low = calculate_crop_water_stress_index(canopy_temp_c=10.0, air_temp_c=30.0, vpd_kpa=3.0, crop="Potato")
+        res_high = calculate_crop_water_stress_index(canopy_temp_c=45.0, air_temp_c=25.0, vpd_kpa=0.5, crop="Potato")
+        self.assertGreaterEqual(res_low["cwsi"], 0.0)
+        self.assertLessEqual(res_low["cwsi"], 1.0)
+        self.assertGreaterEqual(res_high["cwsi"], 0.0)
+        self.assertLessEqual(res_high["cwsi"], 1.0)
+
+    def test_irrigation_prescription_and_efficiency(self):
+        from utils.evapotranspiration_cwsi import optimize_irrigation_and_disease_schedule
+        sched_drip = optimize_irrigation_and_disease_schedule(
+            crop="Tomato",
+            growth_stage="Mid-Season / Fruit Bulking",
+            et0_mm_day=5.0,
+            effective_rainfall_mm=0.0,
+            delivery_system="Subsurface Drip",
+            target_area_ha=2.0
+        )
+        # Tomato Kc mid is 1.15 -> ETc = 5.75 mm
+        self.assertAlmostEqual(sched_drip["actual_crop_etc_mm"], 5.75, places=1)
+        self.assertGreater(sched_drip["gross_irrigation_mm"], sched_drip["net_irrigation_mm"])
+        self.assertAlmostEqual(sched_drip["volume_m3"], sched_drip["gross_irrigation_mm"] * 10.0 * 2.0, places=1)
+        self.assertGreater(sched_drip["volume_gallons"], 1000.0)
+
+    def test_disease_timing_and_overhead_hazard(self):
+        from utils.evapotranspiration_cwsi import optimize_irrigation_and_disease_schedule
+        # Overnight irrigation -> dangerous leaf wetness
+        sched_dusk = optimize_irrigation_and_disease_schedule(
+            crop="Tomato",
+            delivery_system="Center Pivot / Overhead Sprinkler",
+            planned_irrigation_time="08:30 PM (Dusk)"
+        )
+        self.assertGreater(sched_dusk["combined_disease_hazard_multiplier"], 3.0)
+        self.assertIn("TRAP", sched_dusk["timing_risk_status"])
+
+        # Dawn irrigation -> optimal drying
+        sched_dawn = optimize_irrigation_and_disease_schedule(
+            crop="Tomato",
+            delivery_system="Subsurface Drip",
+            planned_irrigation_time="05:00 AM (Dawn)"
+        )
+        self.assertEqual(sched_dawn["combined_disease_hazard_multiplier"], 1.0)
+        self.assertIn("OPTIMAL", sched_dawn["timing_risk_status"])
+
+    def test_depletion_trajectory_and_raw_threshold(self):
+        from utils.evapotranspiration_cwsi import generate_irrigation_depletion_curve
+        traj = generate_irrigation_depletion_curve(
+            daily_etc_mm=6.0,
+            rooting_depth_m=1.0,
+            soil_water_capacity_mm_per_m=120.0,
+            depletion_fraction_p=0.40,
+            horizon_days=7
+        )
+        self.assertEqual(len(traj), 7)
+        self.assertGreater(traj[-1]["cumulative_depletion_mm"], traj[0]["cumulative_depletion_mm"])
+        self.assertLess(traj[-1]["moisture_remaining_pct"], traj[0]["moisture_remaining_pct"])
+        # Day 7: 42 mm depletion, RAW = 48 mm -> should be nearing stress
+        self.assertIn("raw_threshold_mm", traj[0])
+        self.assertEqual(traj[0]["raw_threshold_mm"], 48.0)
+
+    def test_pdf_report_with_irrigation_data(self):
+        from utils.pdf_generator import generate_pdf_report
+        from utils.evapotranspiration_cwsi import (
+            calculate_fao56_penman_monteith,
+            calculate_crop_water_stress_index,
+            optimize_irrigation_and_disease_schedule
+        )
+        img = Image.new("RGB", (256, 256), color=(40, 160, 40))
+        pred_data = {
+            "predicted_class": "Tomato___Early_blight",
+            "confidence": 0.95,
+            "is_healthy": False,
+            "all_probabilities": {"Tomato___Early_blight": 0.95, "Tomato___healthy": 0.05}
+        }
+        disease_info = {
+            "disease_name": "Tomato Early Blight",
+            "description": "Fungal infection caused by Alternaria solani.",
+            "symptoms": "Concentric rings and brown target lesions on lower foliage.",
+            "causes": "Warm temperatures and high humidity.",
+            "immediate_actions": "Prune lower infected leaves.",
+            "organic_treatment": "Copper octanoate.",
+            "chemical_treatment": ["Chlorothalonil"],
+            "preventive_measures": ["Drip irrigation", "Crop rotation"],
+            "nutrition_and_care": "Avoid excess nitrogen."
+        }
+        et0_res = calculate_fao56_penman_monteith(24.0, 55.0)
+        cwsi_res = calculate_crop_water_stress_index(23.5, 24.0, et0_res["vapor_pressure_deficit_kpa"], "Tomato")
+        sched_res = optimize_irrigation_and_disease_schedule(crop="Tomato", et0_mm_day=et0_res["et0_mm_day"])
+        irrig_payload = {
+            "et0": et0_res,
+            "cwsi": cwsi_res,
+            "schedule": sched_res
+        }
+        pdf_path = generate_pdf_report(
+            original_img=img,
+            heatmap_img=None,
+            prediction_data=pred_data,
+            disease_info=disease_info,
+            irrigation_data=irrig_payload
+        )
+        self.assertTrue(os.path.exists(pdf_path))
+        self.assertGreater(os.path.getsize(pdf_path), 1000)
+        try:
+            os.remove(pdf_path)
+        except OSError:
+            pass
+
+
 if __name__ == "__main__":
     unittest.main()
 
