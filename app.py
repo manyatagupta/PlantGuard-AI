@@ -63,6 +63,16 @@ from utils.fungicide_decay import (
     get_product_kinetics,
     FUNGICIDE_KINETICS_DATABASE
 )
+from utils.soilborne_pathology import (
+    calculate_soilborne_pathogen_risk,
+    evaluate_soil_biological_suppressiveness,
+    prescribe_seed_and_drench_regimen,
+    generate_suppressiveness_radar_data,
+    export_soilborne_assessment_json,
+    SOILBORNE_PATHOGENS_DATABASE,
+    SOIL_TEXTURE_MODIFIERS,
+    SOIL_COMPACTION_FACTORS
+)
 from utils.spatial_mapping import (
     generate_field_prescription_grid,
     export_field_prescription_geojson,
@@ -352,6 +362,7 @@ def main():
                 "📦 Multi-Leaf Canopy Batch Scanner",
                 "🔬 Recovery & Healing Tracker",
                 "🧪 Abiotic Nutrient Diagnostic Matrix",
+                "🌱 Soilborne Pathogen & Damping-Off Forecaster",
                 "📡 IoT Microclimate & VPD Telemetry",
                 "🌦️ Disease Risk Forecaster", 
                 "🌡️ Pathogen Phenology & Degree-Day Engine",
@@ -905,6 +916,199 @@ def main():
         return
 
     # IoT Microclimate & VPD Telemetry View
+    # Soilborne Pathogen & Seedling Damping-Off View
+    if page == "🌱 Soilborne Pathogen & Damping-Off Forecaster":
+        st.title("🌱 Soilborne Pathogen & Seedling Damping-Off Bio-Epidemiological Forecaster")
+        st.markdown("### Hydro-thermal infection modeling, Oomycete zoospore motility curves, biological soil suppressiveness scoring, and seed treatment prescriptions.")
+        st.caption("Evaluates root-zone disease hazards (Pythium, Rhizoctonia, Fusarium, Phytophthora, Verticillium, Macrophomina) based on soil temperature, moisture % Field Capacity, texture impedance, compaction, biological organic matter (SOM %), and microbial antagonist buffering.")
+
+        col_sp1, col_sp2 = st.columns([1.6, 2.4], gap="large")
+
+        with col_sp1:
+            st.markdown("#### 🚜 Soil Hydro-Thermal & Edaphic Telemetry")
+            
+            s_crop = st.selectbox(
+                "🌾 Target Seedling / Crop:",
+                ["Tomato", "Potato", "Pepper", "Cucumber", "Corn", "Soybean", "Cotton"],
+                index=0,
+                key="soil_crop_select"
+            )
+            
+            col_st1, col_st2 = st.columns(2)
+            with col_st1:
+                s_temp = st.slider("🌡️ Soil Temp at 5-10cm (°C):", 5.0, 42.0, 18.0, 0.5, key="soil_temp_slider")
+                s_depth = st.slider("📏 Sowing Depth (cm):", 1.0, 6.0, 3.5, 0.5, key="soil_depth_slider")
+            with col_st2:
+                s_moist = st.slider("💧 Soil Moisture (% Field Capacity):", 10.0, 100.0, 78.0, 1.0, key="soil_moist_slider")
+                s_comp = st.selectbox("🧱 Compaction / Bulk Density:", list(SOIL_COMPACTION_FACTORS.keys()), index=1, key="soil_comp_select")
+
+            s_text = st.selectbox("🧱 Soil Textural Class:", list(SOIL_TEXTURE_MODIFIERS.keys()), index=1, key="soil_texture_select")
+
+            st.markdown("---")
+            st.markdown("#### 🛡️ Soil Health & Suppressiveness Profiling")
+            col_sh1, col_sh2 = st.columns(2)
+            with col_sh1:
+                s_som = st.slider("🍂 Soil Organic Matter (% SOM):", 0.5, 8.0, 3.8, 0.1, key="soil_som_slider")
+                s_ph = st.slider("⚗️ Soil pH:", 4.5, 8.5, 6.5, 0.1, key="soil_ph_slider")
+            with col_sh2:
+                s_rot = st.selectbox("🔄 Non-Host Rotation Break (Years):", [1, 2, 3, 4], index=1, key="soil_rot_select")
+                s_till = st.selectbox("🚜 Tillage Practice:", ["No-Till / Direct Drill", "Reduced / Minimum Till", "Conventional Deep Inversion Moldboard"], index=1, key="soil_till_select")
+
+            s_inoc = st.checkbox("🧪 Inoculated with Biocontrols (Trichoderma / Bacillus)", value=True, key="soil_inoc_check")
+
+        # Run calculations
+        risk_res = calculate_soilborne_pathogen_risk(
+            soil_temp_c=s_temp,
+            soil_moisture_fc_pct=s_moist,
+            soil_texture=s_text,
+            compaction_level=s_comp,
+            crop=s_crop,
+            seed_depth_cm=s_depth
+        )
+        
+        suppress_res = evaluate_soil_biological_suppressiveness(
+            soil_organic_matter_pct=s_som,
+            soil_ph=s_ph,
+            beneficials_inoculated=s_inoc,
+            crop_rotation_years=s_rot,
+            tillage_practice=s_till,
+            active_pathogen=risk_res["primary_pathogen_key"]
+        )
+        
+        presc_res = prescribe_seed_and_drench_regimen(
+            target_pathogen_key=risk_res["primary_pathogen_key"],
+            crop=s_crop,
+            farming_type="Conventional"
+        )
+        
+        radar_data = generate_suppressiveness_radar_data(suppress_res)
+
+        with col_sp2:
+            st.markdown("#### 📊 Epidemiological Risk & Biological Suppressiveness Dashboard")
+            
+            # KPI Cards
+            kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+            with kpi1:
+                st.markdown(f"""
+                <div class='metric-card' style='padding: 14px 10px; margin-bottom: 12px; border-left: 4px solid {risk_res["overall_color"]};'>
+                    <div class='metric-title'>Soil Hazard Index</div>
+                    <div class='metric-value' style='font-size: 1.8rem; color: {risk_res["overall_color"]};'>{risk_res["overall_risk_score"]}<span style='font-size:1rem; color:#94a3b8;'>/100</span></div>
+                    <div style='color: #cbd5e1; font-size: 0.8rem; font-weight:700;'>{risk_res["overall_tier"]}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with kpi2:
+                st.markdown(f"""
+                <div class='metric-card' style='padding: 14px 10px; margin-bottom: 12px; border-left: 4px solid {suppress_res["suppressiveness_color"]};'>
+                    <div class='metric-title'>Biological Defense</div>
+                    <div class='metric-value' style='font-size: 1.8rem; color: {suppress_res["suppressiveness_color"]};'>{suppress_res["suppressiveness_score"]}<span style='font-size:1rem; color:#94a3b8;'>/100</span></div>
+                    <div style='color: #cbd5e1; font-size: 0.8rem; font-weight:700;'>{suppress_res["suppressiveness_level"].split()[0]}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with kpi3:
+                prim_motility = risk_res["primary_pathogen"]["zoospore_motility_index"]
+                motility_color = "#dc2626" if prim_motility > 0.5 else ("#d97706" if prim_motility > 0.2 else "#16a34a")
+                st.markdown(f"""
+                <div class='metric-card' style='padding: 14px 10px; margin-bottom: 12px; border-left: 4px solid {motility_color};'>
+                    <div class='metric-title'>Zoospore Motility</div>
+                    <div class='metric-value' style='font-size: 1.8rem; color: {motility_color};'>{prim_motility:.2f}</div>
+                    <div style='color: #cbd5e1; font-size: 0.8rem;'>Chemotaxis Activity</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with kpi4:
+                st.markdown(f"""
+                <div class='metric-card' style='padding: 14px 10px; margin-bottom: 12px; border-left: 4px solid #38bdf8;'>
+                    <div class='metric-title'>Emergence Horizon</div>
+                    <div class='metric-value' style='font-size: 1.8rem; color: #38bdf8;'>{risk_res["projected_emergence_days"]}<span style='font-size:1rem; color:#94a3b8;'>d</span></div>
+                    <div style='color: #cbd5e1; font-size: 0.8rem;'>+{risk_res["emergence_delay_penalty"]}d delay ({risk_res["exposure_vulnerability_index"]}x risk)</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            tab_path, tab_supp, tab_rx, tab_export = st.tabs([
+                "🦠 Pathogen Threat Matrix",
+                "🛡️ Biological Suppressiveness",
+                "💊 Seed & Drench Prescriptions",
+                "📥 FMIS JSON Export"
+            ])
+
+            with tab_path:
+                st.markdown(f"##### Primary Active Threat: **{risk_res['primary_pathogen']['common_name']}**")
+                st.info(f"**Organism:** {risk_res['primary_pathogen']['organism_class']} • **FRAC Class:** `{risk_res['primary_pathogen']['frac_chemical_group']}`")
+                
+                chart_data = {
+                    "Pathogen": [d["common_name"].split()[0] + " " + d["common_name"].split()[1] for d in risk_res["pathogen_breakdown"].values()],
+                    "Risk Score": [d["risk_score"] for d in risk_res["pathogen_breakdown"].values()]
+                }
+                df_chart = pd.DataFrame(chart_data).sort_values(by="Risk Score", ascending=False)
+                st.bar_chart(df_chart.set_index("Pathogen"))
+
+                st.markdown("###### Diagnostic Symptoms & In-Field Indicators:")
+                for sym in risk_res["primary_pathogen"]["primary_symptoms"]:
+                    st.markdown(f"- ⚠️ {sym}")
+
+            with tab_supp:
+                st.markdown(f"##### Soil Health Defense: <span style='color:{suppress_res['suppressiveness_color']}; font-weight:800;'>{suppress_res['suppressiveness_level']}</span>", unsafe_allow_html=True)
+                st.caption(suppress_res["suppressiveness_summary"])
+                
+                df_radar = pd.DataFrame({
+                    "Soil Defense Dimension": radar_data["categories"],
+                    "Integrity (%)": radar_data["values"]
+                })
+                st.dataframe(df_radar, use_container_width=True)
+                
+                st.markdown("###### Agronomic Suppressiveness Diagnostics:")
+                for diag in suppress_res["diagnostic_rationale"]:
+                    st.markdown(f"- 🌿 {diag}")
+
+            with tab_rx:
+                st.markdown(f"##### Targeted Prescriptions for **{presc_res['target_pathogen']}**")
+                
+                rx_col1, rx_col2 = st.columns(2)
+                with rx_col1:
+                    st.markdown("###### 🧪 Chemical Seed Coating")
+                    c_seed = presc_res["chemical_seed_treatment"]
+                    st.markdown(f"**Active Ingredient:** {c_seed['primary_active']}")
+                    st.markdown(f"**FRAC Group:** `{c_seed['frac_code']}`")
+                    st.markdown(f"**Partner Molecule:** {c_seed['partner_active']}")
+                    st.markdown(f"**Target Dose:** `{c_seed['target_dose']}`")
+                    st.caption(f"🛡️ {c_seed['spectrum']}")
+                    st.warning(f"⚠️ {c_seed['resistance_stewardship']}")
+                    
+                    st.markdown("###### 🚜 In-Furrow / Drip Chemigation")
+                    drench = presc_res["in_furrow_drench_prescription"]
+                    st.markdown(f"**Formulation:** {drench['product_name']}")
+                    st.markdown(f"**Application:** {drench['application_method']}")
+                    st.markdown(f"**Dosage Rate:** `{drench['dose_rate']}`")
+                    st.markdown(f"**Water Volume:** `{drench['water_carrier_volume']}`")
+                
+                with rx_col2:
+                    st.markdown("###### 🌿 Biological Antagonist Seed Coating")
+                    b_seed = presc_res["biological_seed_treatment"]
+                    st.markdown(f"**Biocontrol Agents:** {b_seed['active_biologicals']}")
+                    st.markdown(f"**Viable Inoculum:** `{b_seed['viable_spore_count']}`")
+                    st.markdown(f"**Slurry Dosage:** `{b_seed['slurry_rate']}`")
+                    st.caption(f"🌱 {b_seed['mode_of_action']}")
+                    st.info(f"🕒 {b_seed['application_window']}")
+                    
+                    st.markdown("###### 🌾 Biofumigation Protocol")
+                    biofum = presc_res["biofumigation_protocol"]
+                    st.markdown(f"**Cover Crop:** {biofum['cover_crop_species']}")
+                    st.markdown(f"**Seeding Rate:** `{biofum['seeding_rate']}`")
+                    st.markdown(f"**Termination Stage:** {biofum['termination_timing']}")
+                    st.caption(biofum["incorporation_protocol"])
+
+            with tab_export:
+                st.markdown("##### 📥 RFC-8259 Digital Farm Management System (FMIS) JSON")
+                json_str = export_soilborne_assessment_json(risk_res, suppress_res, presc_res)
+                st.download_button(
+                    label="💾 Download Soilborne Pathology Audit (JSON)",
+                    data=json_str,
+                    file_name=f"soilborne_pathology_audit_{s_crop.lower()}.json",
+                    mime="application/json",
+                    use_container_width=True
+                )
+                st.code(json_str[:1200] + "\n...", language="json")
+        return
+
     if page == "📡 IoT Microclimate & VPD Telemetry":
         st.title("📡 Real-time IoT Microclimate & VPD Outbreak Monitor")
         st.markdown("### Psychrometric Vapor Pressure Deficit (VPD) modeling and farm sensor node telemetry.")
