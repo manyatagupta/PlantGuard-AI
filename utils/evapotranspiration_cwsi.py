@@ -251,3 +251,269 @@ def calculate_fao56_penman_monteith(
         "aerodynamic_component_mm": round(num_aero / denom, 2)
     }
 
+
+def calculate_crop_water_stress_index(
+    canopy_temp_c: float,
+    air_temp_c: float,
+    vpd_kpa: float,
+    crop: str = "Tomato"
+) -> Dict[str, Any]:
+    """
+    Computes the empirical Crop Water Stress Index (CWSI in range [0.0, 1.0])
+    using the Jackson-Idso baseline thermography model.
+    
+    Formula:
+        Tc - Ta = Canopy temperature depression
+        (Tc - Ta)_lower = a - b * VPD (Non-Water-Stressed Baseline)
+        (Tc - Ta)_upper = Constant upper limit under complete stomatal shutdown
+        CWSI = [(Tc - Ta) - (Tc - Ta)_lower] / [(Tc - Ta)_upper - (Tc - Ta)_lower]
+    """
+    crop_info = CROP_COEFFICIENT_DATABASE.get(crop, CROP_COEFFICIENT_DATABASE["Tomato"])
+    
+    a = crop_info["idso_nwsb_intercept_a"]
+    b = crop_info["idso_nwsb_slope_b"]
+    upper_limit = crop_info["idso_upper_limit_deg_c"]
+    
+    # Canopy temperature depression
+    delta_t = canopy_temp_c - air_temp_c
+    
+    # Non-water-stressed baseline lower limit (fully transpiring)
+    lower_limit = a - (b * vpd_kpa)
+    
+    # Ensure upper limit is always higher than lower limit
+    effective_upper = max(lower_limit + 1.5, upper_limit)
+    
+    # CWSI calculation
+    denom = effective_upper - lower_limit
+    if denom <= 0:
+        cwsi = 0.5
+    else:
+        cwsi = (delta_t - lower_limit) / denom
+        
+    cwsi = round(float(max(0.0, min(1.0, cwsi))), 3)
+    
+    # Classification of water stress and physiological state
+    if cwsi <= 0.20:
+        status = "NO STRESS / LUXURY TRANSPIRATION"
+        color = "#16a34a"
+        advisory = "Canopy stomata are fully open with unrestricted transpiration cooling. Soil moisture is optimal."
+    elif cwsi <= 0.40:
+        status = "MILD REGULATED DEFICIT"
+        color = "#2563eb"
+        advisory = "Mild stomatal constriction. Beneficial for fruit sugar accumulation in tomatoes and winegrapes."
+    elif cwsi <= 0.60:
+        status = "MODERATE WATER STRESS"
+        color = "#d97706"
+        advisory = "Stomatal conductance is constrained by ~50%. Irrigation replenishment is recommended within 24 hours."
+    elif cwsi <= 0.80:
+        status = "SEVERE DROUGHT STRESS"
+        color = "#ea580c"
+        advisory = "Severe moisture deficit inducing canopy heating and leaf roll. Immediate irrigation mandatory to prevent yield loss."
+    else:
+        status = "CRITICAL DESICCATION HAZARD"
+        color = "#dc2626"
+        advisory = "Canopy stomata completely shut down; thermal runaway with risk of irreversible cavitation and blossom drop."
+        
+    return {
+        "cwsi": cwsi,
+        "cwsi_pct": round(cwsi * 100.0, 1),
+        "canopy_temp_c": canopy_temp_c,
+        "air_temp_c": air_temp_c,
+        "temp_depression_delta_t": round(delta_t, 2),
+        "nwsb_lower_limit_c": round(lower_limit, 2),
+        "upper_limit_c": round(effective_upper, 2),
+        "status": status,
+        "color": color,
+        "advisory": advisory,
+        "crop": crop
+    }
+
+
+def optimize_irrigation_and_disease_schedule(
+    crop: str = "Tomato",
+    growth_stage: str = "Mid-Season / Fruit Bulking",
+    et0_mm_day: float = 5.2,
+    effective_rainfall_mm: float = 0.0,
+    delivery_system: str = "Subsurface Drip",
+    target_area_ha: float = 1.0,
+    planned_irrigation_time: str = "05:00 AM (Dawn)"
+) -> Dict[str, Any]:
+    """
+    Computes precise irrigation volume and audits foliar disease risk synergy
+    based on irrigation method and diurnal timing.
+    """
+    crop_info = CROP_COEFFICIENT_DATABASE.get(crop, CROP_COEFFICIENT_DATABASE["Tomato"])
+    delivery_info = IRRIGATION_DELIVERY_SYSTEMS.get(delivery_system, IRRIGATION_DELIVERY_SYSTEMS["Subsurface Drip"])
+    
+    # 1. Determine phenological Crop Coefficient (Kc)
+    stage_lower = growth_stage.lower()
+    if "ini" in stage_lower or "seed" in stage_lower or "transplant" in stage_lower:
+        kc = crop_info["kc_ini"]
+        stage_label = "Initial Emergence / Early Vegetative"
+    elif "mid" in stage_lower or "bulk" in stage_lower or "flower" in stage_lower or "fruit" in stage_lower:
+        kc = crop_info["kc_mid"]
+        stage_label = "Mid-Season / Peak Transpiration"
+    else:
+        kc = crop_info["kc_end"]
+        stage_label = "Late Season / Maturation & Ripening"
+        
+    # 2. Actual Crop Evapotranspiration ETc = Kc * ET0 (mm/day)
+    etc_mm_day = round(kc * et0_mm_day, 2)
+    
+    # 3. Net Irrigation Requirement (mm)
+    net_irrigation_mm = max(0.0, etc_mm_day - effective_rainfall_mm)
+    
+    # 4. Gross Irrigation Requirement accounting for application efficiency
+    eff_pct = delivery_info["application_efficiency_pct"]
+    gross_irrigation_mm = round(net_irrigation_mm / (eff_pct / 100.0), 2) if eff_pct > 0 else net_irrigation_mm
+    
+    # 5. Volumetric Requirement
+    # 1 mm over 1 ha = 10 m³ = 10,000 Liters
+    # 1 ha = 2.47105 acres -> 1 mm over 1 acre = 1,071.3 gallons
+    volume_m3 = round(gross_irrigation_mm * 10.0 * target_area_ha, 1)
+    volume_liters = round(volume_m3 * 1000.0, 0)
+    target_area_acres = target_area_ha * 2.47105
+    volume_gallons = round(gross_irrigation_mm * 1071.3 * target_area_acres, 0)
+    
+    # 6. Delivery System Runtime
+    # Typical delivery capacities: Drip = 2.5 mm/hr, Pivot = 6.0 mm/hr, Furrow = 15.0 mm/hr
+    if "drip" in delivery_system.lower():
+        sys_rate_mm_hr = 2.5
+    elif "sprinkler" in delivery_system.lower() or "pivot" in delivery_system.lower():
+        sys_rate_mm_hr = 6.0
+    else:
+        sys_rate_mm_hr = 12.0
+    runtime_hours = round(gross_irrigation_mm / sys_rate_mm_hr, 1)
+    
+    # 7. Disease & Leaf Wetness Timing Risk Analysis
+    timing_lower = planned_irrigation_time.lower()
+    if "dusk" in timing_lower or "night" in timing_lower or "evening" in timing_lower or "pm" in timing_lower and any(h in timing_lower for h in ["18", "19", "20", "21", "22", "6:", "7:", "8:", "9:"]):
+        timing_risk = "DANGEROUS LEAF WETNESS TRAP"
+        timing_color = "#dc2626"
+        timing_desc = (
+            "Overnight irrigation traps free water films on leaf surfaces for 8-12 continuous hours without solar drying. "
+            "Multiplies fungal zoospore germination (Phytophthora, Alternaria, Downy Mildew) by up to 3.8x."
+        )
+        timing_hazard_multiplier = 3.5
+    elif "mid-day" in timing_lower or "noon" in timing_lower or "afternoon" in timing_lower:
+        timing_risk = "SUB-OPTIMAL / HIGH EVAPORATION"
+        timing_color = "#d97706"
+        timing_desc = (
+            "Mid-day applications suffer 25-35% evaporative loss before reaching the root zone. "
+            "Can cause optical lens scorching on sensitive leaves under high UV index."
+        )
+        timing_hazard_multiplier = 1.3
+    else:
+        # Dawn / Early morning (4:00 AM - 8:00 AM)
+        timing_risk = "AGRONOMICALLY OPTIMAL"
+        timing_color = "#16a34a"
+        timing_desc = (
+            "Dawn irrigation utilizes natural morning dew period. Rising morning sun and thermal wind currents "
+            "dry the foliar canopy within 30-45 minutes, neutralizing pathogen germination windows."
+        )
+        timing_hazard_multiplier = 1.0
+        
+    combined_disease_hazard = round(delivery_info["disease_risk_multiplier"] * timing_hazard_multiplier, 2)
+    
+    if combined_disease_hazard >= 3.0:
+        overall_pathology_risk = "CRITICAL PATHOGEN MULTIPLIER"
+        pathology_color = "#dc2626"
+    elif combined_disease_hazard >= 1.8:
+        overall_pathology_risk = "ELEVATED DISEASE HAZARD"
+        pathology_color = "#ea580c"
+    elif combined_disease_hazard >= 1.2:
+        overall_pathology_risk = "MODERATE BIO-RISK"
+        pathology_color = "#d97706"
+    else:
+        overall_pathology_risk = "LOW DISEASE MULTIPLIER"
+        pathology_color = "#16a34a"
+        
+    return {
+        "crop": crop,
+        "growth_stage": stage_label,
+        "crop_coefficient_kc": kc,
+        "reference_et0_mm": et0_mm_day,
+        "actual_crop_etc_mm": etc_mm_day,
+        "effective_rainfall_mm": effective_rainfall_mm,
+        "net_irrigation_mm": net_irrigation_mm,
+        "gross_irrigation_mm": gross_irrigation_mm,
+        "application_efficiency_pct": eff_pct,
+        "volume_m3": volume_m3,
+        "volume_liters": volume_liters,
+        "volume_gallons": volume_gallons,
+        "system_runtime_hours": runtime_hours,
+        "delivery_system": delivery_system,
+        "added_leaf_wetness_hours": delivery_info["added_leaf_wetness_hours"],
+        "timing_risk_status": timing_risk,
+        "timing_risk_color": timing_color,
+        "timing_advisory": timing_desc,
+        "combined_disease_hazard_multiplier": combined_disease_hazard,
+        "overall_pathology_risk": overall_pathology_risk,
+        "pathology_color": pathology_color,
+        "target_area_ha": target_area_ha,
+        "target_area_acres": round(target_area_acres, 2)
+    }
+
+
+def generate_irrigation_depletion_curve(
+    daily_etc_mm: float,
+    rooting_depth_m: float = 0.8,
+    soil_water_capacity_mm_per_m: float = 140.0,
+    depletion_fraction_p: float = 0.40,
+    horizon_days: int = 7
+) -> List[Dict[str, Any]]:
+    """
+    Simulates forward daily soil water depletion trajectory from field capacity
+    to determine the exact day non-stress threshold (RAW) is breached.
+    
+    Total Available Water: TAW = Rooting_Depth * Soil_Capacity
+    Readily Available Water: RAW = p * TAW
+    """
+    taw_mm = rooting_depth_m * soil_water_capacity_mm_per_m
+    raw_mm = depletion_fraction_p * taw_mm
+    
+    current_depletion_mm = 0.0
+    trajectory = []
+    
+    for day in range(1, horizon_days + 1):
+        current_depletion_mm += daily_etc_mm
+        moisture_remaining_pct = max(0.0, 100.0 * (1.0 - (current_depletion_mm / taw_mm)))
+        is_stressed = current_depletion_mm > raw_mm
+        
+        trajectory.append({
+            "day": day,
+            "cumulative_depletion_mm": round(current_depletion_mm, 1),
+            "moisture_remaining_pct": round(moisture_remaining_pct, 1),
+            "raw_threshold_mm": round(raw_mm, 1),
+            "taw_total_mm": round(taw_mm, 1),
+            "is_water_stressed": is_stressed,
+            "status": "WATER STRESSED" if is_stressed else "OPTIMAL WATER"
+        })
+        
+    return trajectory
+
+
+def export_irrigation_assessment_json(
+    et0_data: Dict[str, Any],
+    cwsi_data: Dict[str, Any],
+    schedule_data: Dict[str, Any]
+) -> str:
+    """
+    Exports a structured RFC-8259 JSON audit payload for precision irrigation controllers
+    and Farm Management Information Systems (FMIS).
+    """
+    import json
+    import datetime
+    
+    payload = {
+        "audit_metadata": {
+            "schema": "PlantGuard-FAO56-Irrigation-v1.0",
+            "timestamp_utc": datetime.datetime.utcnow().isoformat() + "Z",
+            "evaluator": "PlantGuard AI Evapotranspiration & CWSI Engine"
+        },
+        "reference_evapotranspiration_fao56": et0_data,
+        "crop_water_stress_index_cwsi": cwsi_data,
+        "precision_irrigation_prescription": schedule_data
+    }
+    
+    return json.dumps(payload, indent=2)
