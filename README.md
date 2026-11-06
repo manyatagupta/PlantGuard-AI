@@ -3,7 +3,7 @@
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue?style=for-the-badge&logo=python)
 ![TensorFlow](https://img.shields.io/badge/TensorFlow-2.x-orange?style=for-the-badge&logo=tensorflow)
 ![Streamlit](https://img.shields.io/badge/Streamlit-1.x-red?style=for-the-badge&logo=streamlit)
-![Tests](https://img.shields.io/badge/Tests-89%20Passed-brightgreen?style=for-the-badge&logo=pytest)
+![Tests](https://img.shields.io/badge/Tests-98%20Passed-brightgreen?style=for-the-badge&logo=pytest)
 ![CI](https://img.shields.io/badge/CI-Automated-success?style=for-the-badge&logo=githubactions)
 ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
@@ -15,6 +15,7 @@ PlantGuard AI is an intelligent, full-stack web application designed to help far
 **⚠️ Disclaimer:** This system is built for educational and assistive purposes and should not replace professional agricultural advice.
 
 ## ✨ Key Features
+- **💧 FAO-56 Penman-Monteith Evapotranspiration, CWSI & Disease-Irrigation Co-Management Engine**: Implementation of the United Nations Food and Agriculture Organization (FAO-56) Penman-Monteith physical equation for reference evapotranspiration ($ET_0$ in mm/day), phenological crop coefficients ($K_c$) for actual crop demand ($ET_c = K_c \cdot ET_0$), Jackson-Idso empirical Crop Water Stress Index ($CWSI \in [0.0, 1.0]$) using infrared canopy thermography ($\Delta T = T_c - T_a$), 7-day soil water depletion curves against Readily Available Water ($RAW$), volumetric irrigation requirements ($m^3/\text{ha}$, gallons/acre, pump runtime), and leaf wetness avoidance scheduling (dawn vs. dusk $3.5\times$ disease hazard multiplier).
 - **🌱 Soilborne Pathogen & Seedling Damping-Off Bio-Epidemiological Risk & Suppressiveness Engine**: Hydro-thermal infection modeling ($T_{min}, T_{opt}, T_{max}$ Yan & Hunt curves), Oomycete saturation zoospore motility jumps ($M = 1 / (1 + e^{-0.16(\%FC - 78)})$ for *Pythium* & *Phytophthora*), soil texture impedance and compaction penalties, seedling emergence delay horizons ($GDD$ accumulation lag), biological disease suppressiveness scoring (0–100) based on SOM %, microbial antagonist inoculants (*Trichoderma*, *Bacillus*, *Streptomyces*), crop rotation breaks, and tillage practices, paired with targeted chemical seed treatments (Fludioxonil, Mefenoxam, Sedaxane), in-furrow chemigation, *Brassica* biofumigation protocols, and RFC-8259 FMIS JSON exports.
 - **🗺️ Precision Spatial GIS & Variable-Rate Application (VRA) Prescription Grid**: Inverse Distance Weighting (IDW) continuous disease severity interpolation from scouted points, 3-tier VRA zoning (Curative Hotspot 100%, Protective Perimeter 50%, Clean Refuge 0% skip spray), active chemical reduction & cost savings accounting, with one-click RFC-7946 GeoJSON, Google Earth KML, and machine rate-controller CSV exports.
 - **⏳ Fungicide Residue Degradation & Rainfastness Forecaster**: First-order dissipation kinetics ($C(t) = C_0 \cdot e^{-kt}$) across registered agricultural fungicides, Arrhenius $Q_{10}$ thermal degradation, UV photolysis loss, foliar vegetative canopy expansion dilution, and precipitation wash-off dynamics with projected calendar re-application dates and storm front alerts.
