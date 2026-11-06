@@ -3091,10 +3091,43 @@ def main():
                             primary_chem = chem_treatments[0] if (isinstance(chem_treatments, list) and chem_treatments) else "Azoxystrobin 22.9% (Quadris / Heritage)"
                             decay_profile = calculate_foliar_chemical_decay(primary_chem)
 
-                            # Generate Enhanced PDF with CV, Spectral and Phenology Analysis
+                            # Generate Enhanced PDF with CV, Spectral, Phenology, Decay, Spatial, and Soilborne Analysis
                             epi_data = get_disease_epidemiology_profile(results['predicted_class'])
                             # Spatial VRA prescription context
                             spatial_summary = generate_field_prescription_grid(farm_block_name="North Valley Vineyard (Block 7)")
+                            
+                            # Soilborne Pathogen & Seedling Damping-Off Context
+                            crop_detected = results['predicted_class'].split('___')[0] if '___' in results['predicted_class'] else 'Tomato'
+                            soil_risk_summary = calculate_soilborne_pathogen_risk(
+                                soil_temp_c=18.5,
+                                soil_moisture_fc_pct=78.0,
+                                soil_texture="Clay Loam",
+                                compaction_level="Moderate",
+                                crop=crop_detected
+                            )
+                            soil_suppress_summary = evaluate_soil_biological_suppressiveness(
+                                soil_organic_matter_pct=3.8,
+                                soil_ph=6.5,
+                                beneficials_inoculated=True,
+                                crop_rotation_years=2,
+                                tillage_practice="Reduced / Minimum Till",
+                                active_pathogen=soil_risk_summary["primary_pathogen_key"]
+                            )
+                            soil_presc_summary = prescribe_seed_and_drench_regimen(
+                                target_pathogen_key=soil_risk_summary["primary_pathogen_key"],
+                                crop=crop_detected
+                            )
+                            soil_data_summary = {
+                                "overall_risk_score": soil_risk_summary["overall_risk_score"],
+                                "overall_tier": soil_risk_summary["overall_tier"],
+                                "primary_pathogen": soil_risk_summary["primary_pathogen"],
+                                "projected_emergence_days": soil_risk_summary["projected_emergence_days"],
+                                "exposure_vulnerability_index": soil_risk_summary["exposure_vulnerability_index"],
+                                "suppressiveness_score": soil_suppress_summary["suppressiveness_score"],
+                                "suppressiveness_level": soil_suppress_summary["suppressiveness_level"],
+                                "prescription": soil_presc_summary
+                            }
+                            
                             pdf_path = generate_pdf_report(
                                 image, heatmap_img, results, info, 
                                 cv_analysis=cv_analysis,
@@ -3102,7 +3135,8 @@ def main():
                                 spectral_analysis=spectral_res,
                                 phenology_data=pheno_res,
                                 decay_data=decay_profile,
-                                spatial_data=spatial_summary
+                                spatial_data=spatial_summary,
+                                soil_data=soil_data_summary
                             )
                             with open(pdf_path, "rb") as f:
                                 st.download_button(
@@ -3118,12 +3152,13 @@ def main():
                             
                             # Visual Tabs for Inspection
                             st.markdown("#### 🔬 Detailed Visual & Pathological Inspection")
-                            vtab1, vtab2, vtab3, vtab4, vtab5, vtab6 = st.tabs([
+                            vtab1, vtab2, vtab3, vtab4, vtab5, vtab6, vtab7 = st.tabs([
                                 "🧠 AI Focus (Grad-CAM)",
                                 "🔬 CV Lesion Segmentation",
                                 "🌿 Spectral Chlorophyll & Biometrics",
                                 "🌡️ Pathogen GDD Phenology",
                                 "⏳ Chemical Barrier & Rainfastness",
+                                "🌱 Soilborne Risk & Seed Coating",
                                 "📊 Probabilities"
                             ])
                             
@@ -3188,6 +3223,20 @@ def main():
                                     st.success(f"**Recommended Adjuvant:**\n{k_kin.get('recommended_adjuvant', 'Non-Ionic Surfactant')}\n*{k_kin.get('adjuvant_purpose', 'Improves foliar coverage.')}*")
 
                             with vtab6:
+                                st.markdown(f"##### 🌱 Root-Zone Soilborne Vulnerability ({soil_risk_summary['primary_pathogen']['common_name']})")
+                                col_sb1, col_sb2 = st.columns([1.2, 1], gap="medium")
+                                with col_sb1:
+                                    st.markdown(f"**Hydro-Thermal Risk Index:** <span style='color:{soil_risk_summary['overall_color']}; font-weight:800; font-size:1.15rem;'>{soil_risk_summary['overall_risk_score']} / 100</span> — `{soil_risk_summary['overall_tier']}`", unsafe_allow_html=True)
+                                    st.markdown(f"**Biological Suppressiveness:** `{soil_suppress_summary['suppressiveness_score']} / 100` ({soil_suppress_summary['suppressiveness_level'].split()[0]})")
+                                    st.markdown(f"**Zoospore Motility Index:** `{soil_risk_summary['primary_pathogen']['zoospore_motility_index']:.2f}` (Chemotaxis risk)")
+                                    st.markdown(f"**Seedling Emergence Delay:** `+{soil_risk_summary['emergence_delay_penalty']} Days` (Vulnerability: {soil_risk_summary['exposure_vulnerability_index']}x)")
+                                with col_sb2:
+                                    chem_seed_item = soil_presc_summary.get('chemical_seed_treatment', {})
+                                    bio_seed_item = soil_presc_summary.get('biological_seed_treatment', {})
+                                    st.info(f"**Recommended Seed Treatment:**\nChemical: **{chem_seed_item.get('primary_active', 'Mefenoxam + Fludioxonil')}** ({chem_seed_item.get('frac_code', 'FRAC 4/12')})\nBiological: **{bio_seed_item.get('active_biologicals', 'Trichoderma + Bacillus')}**")
+                                    st.success(f"**Drench / Chemigation:**\n{soil_presc_summary.get('in_furrow_drench_prescription', {}).get('product_name', 'Mefenoxam')} @ {soil_presc_summary.get('in_furrow_drench_prescription', {}).get('dose_rate', '140 mL/ha')}")
+
+                            with vtab7:
                                 st.markdown("##### 🔬 Top Differential Diagnoses:")
                                 if results.get("top_3"):
                                     for t_rank, t_item in enumerate(results["top_3"], 1):
