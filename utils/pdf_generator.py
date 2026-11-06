@@ -46,7 +46,7 @@ def create_probability_chart(probabilities, temp_dir):
     plt.close()
     return chart_path
 
-def generate_pdf_report(original_img, heatmap_img, prediction_data, disease_info, cv_analysis=None, epidemiology_data=None, spectral_analysis=None, phenology_data=None, decay_data=None, spatial_data=None, soil_data=None):
+def generate_pdf_report(original_img, heatmap_img, prediction_data, disease_info, cv_analysis=None, epidemiology_data=None, spectral_analysis=None, phenology_data=None, decay_data=None, spatial_data=None, soil_data=None, irrigation_data=None):
     """
     Generates an enterprise PDF diagnostic report for a prediction.
     
@@ -62,6 +62,7 @@ def generate_pdf_report(original_img, heatmap_img, prediction_data, disease_info
         decay_data: optional dict containing fungicide residue kinetics and re-spray advisory.
         spatial_data: optional dict containing VRA spatial mapping and chemical savings metrics.
         soil_data: optional dict containing soilborne pathogen risk, suppressiveness, and seed prescriptions.
+        irrigation_data: optional dict containing FAO-56 Penman-Monteith ETc, CWSI, and disease timing metrics.
         
     Returns:
         str: Path to the generated PDF file.
@@ -278,6 +279,22 @@ def generate_pdf_report(original_img, heatmap_img, prediction_data, disease_info
                 f"In-Furrow Chemigation: {drench.get('product_name', 'Oxathiapiprolin + Mefenoxam')} @ {drench.get('dose_rate', '140-280 mL/ha')}"
             )
             add_presc_section("Soilborne Pathogen & Seedling Damping-Off Regimen:", soil_text, title_color=(234, 88, 12))
+
+        if irrigation_data:
+            cwsi_inf = irrigation_data.get("cwsi", {})
+            sched_inf = irrigation_data.get("schedule", {})
+            et_inf = irrigation_data.get("et0", {})
+            irrig_text = (
+                f"Reference Evapotranspiration (ET0): {et_inf.get('et0_mm_day', 'N/A')} mm/day (VPD: {et_inf.get('vapor_pressure_deficit_kpa', 'N/A')} kPa)\n"
+                f"Actual Crop Water Demand (ETc): {sched_inf.get('actual_crop_etc_mm', 'N/A')} mm/day (Kc: {sched_inf.get('crop_coefficient_kc', 'N/A')})\n"
+                f"Crop Water Stress Index (CWSI): {cwsi_inf.get('cwsi', 0.0)} ({cwsi_inf.get('status', 'Optimal Transpiration')})\n"
+                f"Canopy Delta T (Tc - Ta): {cwsi_inf.get('temp_depression_delta_t', 0.0)} deg C (Infrared Sensor)\n"
+                f"Prescribed Irrigation: {sched_inf.get('gross_irrigation_mm', 0.0)} mm ({sched_inf.get('volume_m3', 0.0)} m3/ha, ~{sched_inf.get('volume_gallons', 0.0):,.0f} gal)\n"
+                f"Delivery & Runtime: {sched_inf.get('delivery_system', 'Subsurface Drip')} (~{sched_inf.get('system_runtime_hours', 0.0)} Hours)\n"
+                f"Pathogen Timing Strategy: {sched_inf.get('timing_risk_status', 'Dawn Window')} (Foliar Wetness Added: {sched_inf.get('added_leaf_wetness_hours', 0.0)}h)\n"
+                f"Disease Hazard Multiplier: {sched_inf.get('combined_disease_hazard_multiplier', 1.0)}x ({sched_inf.get('overall_pathology_risk', 'LOW')})"
+            )
+            add_presc_section("FAO-56 Evapotranspiration & Crop Water Stress (CWSI) Regimen:", irrig_text, title_color=(14, 165, 233))
 
         add_presc_section("Environmental Triggers & Causes:", disease_info.get("causes", "N/A"))
         add_presc_section("Immediate Containment Steps (First-Aid):", disease_info.get("immediate_actions", "N/A"), title_color=(185, 28, 28))
