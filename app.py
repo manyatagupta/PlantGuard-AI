@@ -63,6 +63,15 @@ from utils.fungicide_decay import (
     get_product_kinetics,
     FUNGICIDE_KINETICS_DATABASE
 )
+from utils.evapotranspiration_cwsi import (
+    calculate_fao56_penman_monteith,
+    calculate_crop_water_stress_index,
+    optimize_irrigation_and_disease_schedule,
+    generate_irrigation_depletion_curve,
+    export_irrigation_assessment_json,
+    CROP_COEFFICIENT_DATABASE,
+    IRRIGATION_DELIVERY_SYSTEMS
+)
 from utils.soilborne_pathology import (
     calculate_soilborne_pathogen_risk,
     evaluate_soil_biological_suppressiveness,
@@ -363,6 +372,7 @@ def main():
                 "🔬 Recovery & Healing Tracker",
                 "🧪 Abiotic Nutrient Diagnostic Matrix",
                 "🌱 Soilborne Pathogen & Damping-Off Forecaster",
+                "💧 Evapotranspiration & Precision Irrigation Engine",
                 "📡 IoT Microclimate & VPD Telemetry",
                 "🌦️ Disease Risk Forecaster", 
                 "🌡️ Pathogen Phenology & Degree-Day Engine",
@@ -1107,6 +1117,181 @@ def main():
                     use_container_width=True
                 )
                 st.code(json_str[:1200] + "\n...", language="json")
+        return
+
+    # FAO-56 Evapotranspiration & Precision Irrigation View
+    if page == "💧 Evapotranspiration & Precision Irrigation Engine":
+        st.title("💧 FAO-56 Evapotranspiration, CWSI & Precision Irrigation Engine")
+        st.markdown("### Penman-Monteith physical reference evapotranspiration ($ET_0$), canopy infrared Crop Water Stress Index ($CWSI$), and leaf wetness disease mitigation.")
+        st.caption("Couples international benchmark atmospheric physics (FAO-56) with Jackson-Idso empirical canopy infrared thermography to calculate exact volumetric irrigation water requirements (m³/ha, gallons/acre) while steering delivery timing (dawn vs dusk) to prevent catastrophic foliar spore germination.")
+
+        col_ir1, col_ir2 = st.columns([1.6, 2.4], gap="large")
+
+        with col_ir1:
+            st.markdown("#### ☀️ FAO-56 Meteorological Inputs")
+            ir_crop = st.selectbox("🌾 Target Crop:", list(CROP_COEFFICIENT_DATABASE.keys()), index=0, key="irrig_crop_select")
+            ir_stage = st.selectbox("🌱 Growth Stage:", ["Initial / Transplanting", "Mid-Season / Peak Bulking & Flowering", "Late Season / Maturation & Harvest"], index=1, key="irrig_stage_select")
+
+            col_met1, col_met2 = st.columns(2)
+            with col_met1:
+                t_mean = st.slider("🌡️ Mean Air Temp (°C):", 5.0, 45.0, 24.5, 0.5, key="irrig_tmean_slider")
+                sol_rad = st.slider("☀️ Solar Radiation (MJ/m²/d):", 5.0, 32.0, 19.5, 0.5, key="irrig_rad_slider")
+                elev_m = st.number_input("⛰️ Elevation (m ASL):", 0.0, 3000.0, 120.0, 10.0, key="irrig_elev_input")
+            with col_met2:
+                rh_pct = st.slider("💧 Relative Humidity (%):", 10.0, 100.0, 55.0, 1.0, key="irrig_rh_slider")
+                u2_wind = st.slider("💨 Wind Speed at 2m (m/s):", 0.2, 10.0, 2.0, 0.1, key="irrig_wind_slider")
+                eff_rain = st.number_input("🌧️ Effective Rain (mm):", 0.0, 50.0, 0.0, 0.5, key="irrig_rain_input")
+
+            st.markdown("---")
+            st.markdown("#### 📷 Canopy Thermography & Delivery System")
+            col_th1, col_th2 = st.columns(2)
+            with col_th1:
+                tc_temp = st.slider("🌡️ Canopy IR Temp Tc (°C):", 10.0, 48.0, 23.8, 0.2, key="irrig_tc_slider")
+                ir_area = st.number_input("📐 Field Area (Hectares):", 0.1, 500.0, 2.5, 0.5, key="irrig_area_input")
+            with col_th2:
+                deliv_sys = st.selectbox("🚜 Irrigation Delivery Method:", list(IRRIGATION_DELIVERY_SYSTEMS.keys()), index=0, key="irrig_sys_select")
+                ir_timing = st.selectbox("🕒 Scheduled Timing Window:", ["05:00 AM (Dawn Dew Transition)", "01:00 PM (Mid-Day Peak Heat)", "08:30 PM (Dusk / Overnight)"], index=0, key="irrig_timing_select")
+
+        # Calculations
+        et0_res = calculate_fao56_penman_monteith(
+            temp_mean_c=t_mean,
+            relative_humidity_pct=rh_pct,
+            solar_radiation_mj_m2_day=sol_rad,
+            wind_speed_2m_m_s=u2_wind,
+            elevation_m=elev_m
+        )
+
+        cwsi_res = calculate_crop_water_stress_index(
+            canopy_temp_c=tc_temp,
+            air_temp_c=t_mean,
+            vpd_kpa=et0_res["vapor_pressure_deficit_kpa"],
+            crop=ir_crop
+        )
+
+        sched_res = optimize_irrigation_and_disease_schedule(
+            crop=ir_crop,
+            growth_stage=ir_stage,
+            et0_mm_day=et0_res["et0_mm_day"],
+            effective_rainfall_mm=eff_rain,
+            delivery_system=deliv_sys,
+            target_area_ha=ir_area,
+            planned_irrigation_time=ir_timing
+        )
+
+        crop_info_cur = CROP_COEFFICIENT_DATABASE.get(ir_crop, CROP_COEFFICIENT_DATABASE["Tomato"])
+        depl_trajectory = generate_irrigation_depletion_curve(
+            daily_etc_mm=sched_res["actual_crop_etc_mm"],
+            rooting_depth_m=crop_info_cur["max_rooting_depth_m"],
+            depletion_fraction_p=crop_info_cur["depletion_fraction_p"],
+            horizon_days=7
+        )
+
+        with col_ir2:
+            st.markdown("#### 📊 Evapotranspiration & Irrigation Command Center")
+
+            # KPI Cards
+            kpi_e1, kpi_e2, kpi_e3, kpi_e4 = st.columns(4)
+            with kpi_e1:
+                st.markdown(f"""
+                <div class='metric-card' style='padding: 14px 10px; margin-bottom: 12px; border-left: 4px solid #38bdf8;'>
+                    <div class='metric-title'>Reference ET0</div>
+                    <div class='metric-value' style='font-size: 1.8rem; color: #38bdf8;'>{et0_res["et0_mm_day"]}<span style='font-size:1rem; color:#94a3b8;'> mm/d</span></div>
+                    <div style='color: #cbd5e1; font-size: 0.8rem;'>VPD: {et0_res["vapor_pressure_deficit_kpa"]} kPa</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with kpi_e2:
+                st.markdown(f"""
+                <div class='metric-card' style='padding: 14px 10px; margin-bottom: 12px; border-left: 4px solid #10b981;'>
+                    <div class='metric-title'>Actual Demand (ETc)</div>
+                    <div class='metric-value' style='font-size: 1.8rem; color: #10b981;'>{sched_res["actual_crop_etc_mm"]}<span style='font-size:1rem; color:#94a3b8;'> mm/d</span></div>
+                    <div style='color: #cbd5e1; font-size: 0.8rem;'>Kc: {sched_res["crop_coefficient_kc"]} ({ir_stage.split()[0]})</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with kpi_e3:
+                st.markdown(f"""
+                <div class='metric-card' style='padding: 14px 10px; margin-bottom: 12px; border-left: 4px solid {cwsi_res["color"]};'>
+                    <div class='metric-title'>Canopy CWSI</div>
+                    <div class='metric-value' style='font-size: 1.8rem; color: {cwsi_res["color"]};'>{cwsi_res["cwsi"]}</div>
+                    <div style='color: #cbd5e1; font-size: 0.8rem; font-weight:700;'>{cwsi_res["status"].split("/")[0]}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with kpi_e4:
+                st.markdown(f"""
+                <div class='metric-card' style='padding: 14px 10px; margin-bottom: 12px; border-left: 4px solid {sched_res["pathology_color"]};'>
+                    <div class='metric-title'>Spore Bio-Hazard</div>
+                    <div class='metric-value' style='font-size: 1.8rem; color: {sched_res["pathology_color"]};'>{sched_res["combined_disease_hazard_multiplier"]}x</div>
+                    <div style='color: #cbd5e1; font-size: 0.8rem;'>+{sched_res["added_leaf_wetness_hours"]}h leaf wetness</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            tab_phys, tab_cwsi, tab_sched, tab_json = st.tabs([
+                "☀️ FAO-56 Energy Balance",
+                "🌿 Canopy Thermography & CWSI",
+                "🚜 Water Volume & Scheduling",
+                "📥 FMIS JSON Export"
+            ])
+
+            with tab_phys:
+                st.markdown("##### FAO-56 Penman-Monteith Energy & Aerodynamic Partitioning")
+                col_eb1, col_eb2 = st.columns(2)
+                with col_eb1:
+                    st.markdown(f"**Radiation Term:** `{et0_res['radiation_component_mm']} mm/day` ({round((et0_res['radiation_component_mm']/et0_res['et0_mm_day'])*100, 1)}% of total energy)")
+                    st.markdown(f"**Aerodynamic Term:** `{et0_res['aerodynamic_component_mm']} mm/day` ({round((et0_res['aerodynamic_component_mm']/et0_res['et0_mm_day'])*100, 1)}% wind/VPD driven)")
+                    st.markdown(f"**Slope Vapor Pressure (Δ):** `{et0_res['slope_vapor_pressure_delta']} kPa/°C`")
+                with col_eb2:
+                    st.markdown(f"**Psychrometric Constant (γ):** `{et0_res['psychrometric_constant_gamma']} kPa/°C`")
+                    st.markdown(f"**Atmospheric Pressure:** `{et0_res['atmospheric_pressure_kpa']} kPa` (Elevation: {elev_m}m)")
+                    st.markdown(f"**Vapor Pressure Deficit (VPD):** `{et0_res['vapor_pressure_deficit_kpa']} kPa`")
+
+                st.info(f"**Crop Evapotranspiration Formula:** ETc = Kc * ET0 = {sched_res['crop_coefficient_kc']} * {et0_res['et0_mm_day']} = {sched_res['actual_crop_etc_mm']} mm/day.")
+
+            with tab_cwsi:
+                st.markdown(f"##### Canopy Thermography: <span style='color:{cwsi_res['color']}; font-weight:800;'>{cwsi_res['status']}</span>", unsafe_allow_html=True)
+                st.caption(cwsi_res["advisory"])
+
+                col_cw1, col_cw2 = st.columns(2)
+                with col_cw1:
+                    st.markdown(f"**Canopy Temp (Tc):** `{tc_temp}°C` • **Air Temp (Ta):** `{t_mean}°C`")
+                    st.markdown(f"**Temperature Depression (Tc - Ta):** `{cwsi_res['temp_depression_delta_t']}°C`")
+                    st.markdown(f"**Non-Water-Stressed Baseline (Lower):** `{cwsi_res['nwsb_lower_limit_c']}°C`")
+                    st.markdown(f"**Stomatal Shutdown Limit (Upper):** `{cwsi_res['upper_limit_c']}°C`")
+                with col_cw2:
+                    st.markdown(f"**CWSI Score:** `{cwsi_res['cwsi']} / 1.00` ({cwsi_res['cwsi_pct']}%)")
+                    st.progress(float(cwsi_res["cwsi"]))
+                    st.caption("Jackson-Idso empirical baseline normalizes canopy infrared temperature against ambient vapor pressure deficit (VPD).")
+
+                st.markdown("###### 7-Day Soil Moisture Depletion Trajectory:")
+                df_traj = pd.DataFrame(depl_trajectory)
+                st.line_chart(df_traj.set_index("day")[["moisture_remaining_pct"]])
+
+            with tab_sched:
+                st.markdown(f"##### Prescribed Irrigation for **{ir_crop}** ({sched_res['growth_stage']})")
+                
+                col_sc1, col_sc2 = st.columns(2)
+                with col_sc1:
+                    st.markdown(f"**Gross Water Depth:** <span style='font-size:1.3rem; font-weight:800; color:#38bdf8;'>{sched_res['gross_irrigation_mm']} mm</span> (Net: {sched_res['net_irrigation_mm']}mm)", unsafe_allow_html=True)
+                    st.markdown(f"**Application Efficiency:** `{sched_res['application_efficiency_pct']}%` ({deliv_sys})")
+                    st.markdown(f"**Total Volume:** **{sched_res['volume_m3']:,.1f} m³** ({sched_res['volume_liters']:,.0f} Liters)")
+                    st.markdown(f"**Imperial Equivalent:** **{sched_res['volume_gallons']:,.0f} Gallons** ({sched_res['target_area_acres']} Acres)")
+                    st.markdown(f"**System Runtime:** **~{sched_res['system_runtime_hours']} Hours** pump run")
+                with col_sc2:
+                    st.markdown(f"**Delivery Method:** `{deliv_sys}`")
+                    st.markdown(f"**Timing Risk:** <span style='color:{sched_res['timing_risk_color']}; font-weight:700;'>{sched_res['timing_risk_status']}</span>", unsafe_allow_html=True)
+                    st.markdown(f"**Added Leaf Wetness Duration:** `{sched_res['added_leaf_wetness_hours']} Hours`")
+                    st.markdown(f"**Combined Bio-Hazard Multiplier:** <span style='color:{sched_res['pathology_color']}; font-weight:800;'>{sched_res['combined_disease_hazard_multiplier']}x</span>", unsafe_allow_html=True)
+                    st.info(sched_res["timing_advisory"])
+
+            with tab_json:
+                st.markdown("##### 📥 RFC-8259 Precision Controller JSON Payload")
+                irrig_json = export_irrigation_assessment_json(et0_res, cwsi_res, sched_res)
+                st.download_button(
+                    label="💾 Download Irrigation & CWSI Audit (JSON)",
+                    data=irrig_json,
+                    file_name=f"irrigation_audit_{ir_crop.lower()}.json",
+                    mime="application/json",
+                    use_container_width=True
+                )
+                st.code(irrig_json[:1200] + "\n...", language="json")
         return
 
     if page == "📡 IoT Microclimate & VPD Telemetry":
